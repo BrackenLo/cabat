@@ -10,7 +10,7 @@ use shipyard::{info::TypeId, Unique, WorkloadModificator, World};
 //====================================================================
 
 pub mod prelude {
-    pub use crate::{Event, EventHandler, Res, ResMut, Stages, SubStages, WorkloadBuilder};
+    pub use crate::{Event, EventHandler, Plugin, Res, ResMut, Stages, SubStages, WorkloadBuilder};
 }
 
 //====================================================================
@@ -107,13 +107,10 @@ impl Iterator for SubStages {
     fn next(&mut self) -> Option<Self::Item> {
         let next = enum_iterator::Sequence::next(self);
 
-        match next {
-            Some(next) => {
-                *self = next;
-                Some(next)
-            }
-            None => None,
+        if let Some(next) = next {
+            *self = next;
         }
+        next
     }
 }
 
@@ -149,35 +146,37 @@ impl<'a> WorkloadBuilder<'a> {
         }
     }
 
-    pub fn add_workload(
+    pub fn add_workload_sub(
         mut self,
         stage: Stages,
-        substage: Option<SubStages>,
+        substage: SubStages,
         workload: shipyard::Workload,
     ) -> Self {
-        log::trace!("Adding workload for stage '{:?}'", stage);
+        log::trace!(
+            "Adding workload for stage '{:?}' - substage {:?}",
+            stage,
+            substage
+        );
+
         let mut old_workload = self
             .workloads
             .remove(&stage)
             .unwrap_or(WorkloadToBuild::new(stage));
 
-        match substage {
-            // Get or create substage and add to
-            Some(substage) => {
-                let new_substage = match old_workload.substages.remove(&substage) {
-                    Some(old_substage) => old_substage.merge(workload),
-                    None => workload,
-                };
+        let new_substage = match old_workload.substages.remove(&substage) {
+            Some(old_substage) => old_substage.merge(workload),
+            None => workload,
+        };
 
-                old_workload.substages.insert(substage, new_substage);
-            }
-
-            // Add workload to the saved workload
-            None => old_workload.main = old_workload.main.merge(workload),
-        }
+        old_workload.substages.insert(substage, new_substage);
 
         self.workloads.insert(stage, old_workload);
         self
+    }
+
+    #[inline]
+    pub fn add_workload(self, stage: Stages, workload: shipyard::Workload) -> Self {
+        self.add_workload_sub(stage, SubStages::Main, workload)
     }
 
     pub fn add_event<E: Event>(mut self, workload: shipyard::Workload) -> Self {
