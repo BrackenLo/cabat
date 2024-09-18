@@ -8,6 +8,8 @@ use texture::DepthTexture;
 
 pub mod camera;
 pub mod shared;
+#[cfg(feature = "text2d")]
+pub mod text2d_pipeline;
 pub mod texture;
 pub mod tools;
 
@@ -17,6 +19,9 @@ pub struct RendererPlugin {}
 
 impl Plugin for RendererPlugin {
     fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
+        #[cfg(feature = "text2d")]
+        let workload_builder = workload_builder.add_plugin(text2d_pipeline::Text2dPlugin);
+
         workload_builder
             .add_workload_first(
                 Stages::Setup,
