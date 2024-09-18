@@ -5,12 +5,12 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use shipyard::{info::TypeId, Unique, World};
+use shipyard::{info::TypeId, Unique, WorkloadModificator, World};
 
 //====================================================================
 
 pub mod prelude {
-    pub use crate::{Event, EventHandler, Res, ResMut, Stages, WorkloadBuilder};
+    pub use crate::{Event, EventHandler, Res, ResMut, Stages, SubStages, WorkloadBuilder};
 }
 
 //====================================================================
@@ -82,7 +82,7 @@ impl UniqueTools for shipyard::AllStoragesView<'_> {
 
 //====================================================================
 
-#[derive(shipyard::Label, Hash, Debug, Clone, PartialEq, Eq, enum_iterator::Sequence)]
+#[derive(shipyard::Label, Hash, Debug, Clone, Copy, PartialEq, Eq, enum_iterator::Sequence)]
 pub enum Stages {
     Setup,
     First,
@@ -92,8 +92,8 @@ pub enum Stages {
     Last,
 }
 
-#[derive(shipyard::Label, Hash, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UpdateStages {
+#[derive(shipyard::Label, Hash, Debug, Clone, Copy, PartialEq, Eq, enum_iterator::Sequence)]
+pub enum SubStages {
     First,
     Pre,
     Main,
@@ -101,34 +101,46 @@ pub enum UpdateStages {
     Last,
 }
 
+impl Iterator for SubStages {
+    type Item = SubStages;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = enum_iterator::Sequence::next(self);
+
+        match next {
+            Some(next) => {
+                *self = next;
+                Some(next)
+            }
+            None => None,
+        }
+    }
+}
+
 //====================================================================
 
 // TODO - Trait Aliases or custom derive macro
-pub struct WorkloadBuilder<'a, Stages>
-where
-    Stages: std::hash::Hash
-        + PartialEq
-        + Eq
-        + Clone
-        + std::fmt::Debug
-        + shipyard::Label
-        + enum_iterator::Sequence,
-{
+pub struct WorkloadBuilder<'a> {
     world: &'a shipyard::World,
-    workloads: HashMap<Stages, shipyard::Workload>,
+    workloads: HashMap<Stages, WorkloadToBuild>,
     event_workloads: HashMap<TypeId, shipyard::Workload>,
 }
 
-impl<'a, Stages> WorkloadBuilder<'a, Stages>
-where
-    Stages: std::hash::Hash
-        + PartialEq
-        + Eq
-        + Clone
-        + std::fmt::Debug
-        + shipyard::Label
-        + enum_iterator::Sequence,
-{
+struct WorkloadToBuild {
+    main: shipyard::Workload,
+    substages: HashMap<SubStages, shipyard::Workload>,
+}
+
+impl WorkloadToBuild {
+    fn new(stage: Stages) -> Self {
+        Self {
+            main: shipyard::Workload::new(stage),
+            substages: HashMap::new(),
+        }
+    }
+}
+
+impl<'a> WorkloadBuilder<'a> {
     pub fn new(world: &'a shipyard::World) -> Self {
         Self {
             world,
@@ -137,15 +149,34 @@ where
         }
     }
 
-    pub fn add_workload(mut self, stage: Stages, workload: shipyard::Workload) -> Self {
+    pub fn add_workload(
+        mut self,
+        stage: Stages,
+        substage: Option<SubStages>,
+        workload: shipyard::Workload,
+    ) -> Self {
         log::trace!("Adding workload for stage '{:?}'", stage);
-        let old_workload = self
+        let mut old_workload = self
             .workloads
             .remove(&stage)
-            .unwrap_or(shipyard::Workload::new(stage.clone()));
+            .unwrap_or(WorkloadToBuild::new(stage));
 
-        self.workloads.insert(stage, old_workload.merge(workload));
+        match substage {
+            // Get or create substage and add to
+            Some(substage) => {
+                let new_substage = match old_workload.substages.remove(&substage) {
+                    Some(old_substage) => old_substage.merge(workload),
+                    None => workload,
+                };
 
+                old_workload.substages.insert(substage, new_substage);
+            }
+
+            // Add workload to the saved workload
+            None => old_workload.main = old_workload.main.merge(workload),
+        }
+
+        self.workloads.insert(stage, old_workload);
         self
     }
 
@@ -163,16 +194,33 @@ where
         self
     }
 
-    pub fn add_plugin<T: Plugin<Stages>>(self, plugin: T) -> Self {
+    pub fn add_plugin<T: Plugin>(self, plugin: T) -> Self {
         log::trace!("Adding plugin '{}'", std::any::type_name::<T>());
         plugin.build(self)
     }
 
-    pub fn build(mut self) {
-        // Add workloads to world
-        self.workloads
-            .drain()
-            .for_each(|(_, workload)| workload.add_to_world(&self.world).unwrap());
+    pub fn build(self) {
+        self.workloads.into_iter().for_each(|(_, mut to_build)| {
+            enum_iterator::all::<SubStages>()
+                .into_iter()
+                .fold(to_build.main, |acc, substage| {
+                    // Check and Add substage if it exists
+                    match to_build.substages.remove(&substage) {
+                        Some(workload) => {
+                            let workload = workload.tag(substage);
+                            // Go through substages and add before all
+                            acc.merge(substage.into_iter().fold(workload, |acc, substage_after| {
+                                acc.before_all(substage_after)
+                            }))
+
+                            //
+                        }
+                        None => acc,
+                    }
+                })
+                .add_to_world(&self.world)
+                .unwrap();
+        });
 
         // Print debug data
         let data = self.world.workloads_info().0.iter().fold(
@@ -206,7 +254,7 @@ where
         // Process events
         let ids = self
             .event_workloads
-            .drain()
+            .into_iter()
             .map(|(id, workload)| {
                 workload.add_to_world(&self.world).unwrap();
                 id
@@ -222,17 +270,8 @@ where
     }
 }
 
-pub trait Plugin<Stages>
-where
-    Stages: std::hash::Hash
-        + PartialEq
-        + Eq
-        + Clone
-        + std::fmt::Debug
-        + shipyard::Label
-        + enum_iterator::Sequence,
-{
-    fn build(self, workload_builder: WorkloadBuilder<Stages>) -> WorkloadBuilder<Stages>;
+pub trait Plugin {
+    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder;
 }
 
 //====================================================================
