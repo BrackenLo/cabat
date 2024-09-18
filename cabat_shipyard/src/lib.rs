@@ -76,7 +76,7 @@ impl UniqueTools for shipyard::AllStoragesView<'_> {
 
 //====================================================================
 
-#[derive(shipyard::Label, Hash, Debug, Clone, PartialEq, enum_iterator::Sequence)]
+#[derive(shipyard::Label, Hash, Debug, Clone, PartialEq, Eq, enum_iterator::Sequence)]
 pub enum Stages {
     Setup,
     First,
