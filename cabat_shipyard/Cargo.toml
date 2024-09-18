@@ -11,4 +11,4 @@ downcast = "0.11.0"
 enum-iterator = "2.1.0"
 log = "0.4.22"
 proc = { path = "proc/" }
-shipyard = "0.7.2"
+shipyard = "0.7"

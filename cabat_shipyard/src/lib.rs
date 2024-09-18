@@ -175,8 +175,28 @@ impl<'a> WorkloadBuilder<'a> {
     }
 
     #[inline]
+    pub fn add_workload_first(self, stage: Stages, workload: shipyard::Workload) -> Self {
+        self.add_workload_sub(stage, SubStages::First, workload)
+    }
+
+    #[inline]
+    pub fn add_workload_pre(self, stage: Stages, workload: shipyard::Workload) -> Self {
+        self.add_workload_sub(stage, SubStages::Pre, workload)
+    }
+
+    #[inline]
     pub fn add_workload(self, stage: Stages, workload: shipyard::Workload) -> Self {
         self.add_workload_sub(stage, SubStages::Main, workload)
+    }
+
+    #[inline]
+    pub fn add_workload_post(self, stage: Stages, workload: shipyard::Workload) -> Self {
+        self.add_workload_sub(stage, SubStages::Post, workload)
+    }
+
+    #[inline]
+    pub fn add_workload_last(self, stage: Stages, workload: shipyard::Workload) -> Self {
+        self.add_workload_sub(stage, SubStages::Last, workload)
     }
 
     pub fn add_event<E: Event>(mut self, workload: shipyard::Workload) -> Self {
