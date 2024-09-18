@@ -9,6 +9,12 @@ use shipyard::{info::TypeId, Unique, World};
 
 //====================================================================
 
+pub mod prelude {
+    pub use crate::{Event, EventHandler, Res, ResMut, Stages, WorkloadBuilder};
+}
+
+//====================================================================
+
 pub type Res<'a, T> = shipyard::UniqueView<'a, T>;
 pub type ResMut<'a, T> = shipyard::UniqueViewMut<'a, T>;
 
@@ -83,6 +89,15 @@ pub enum Stages {
     FixedUpdate,
     Update,
     Render,
+    Last,
+}
+
+#[derive(shipyard::Label, Hash, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateStages {
+    First,
+    Pre,
+    Main,
+    Post,
     Last,
 }
 
