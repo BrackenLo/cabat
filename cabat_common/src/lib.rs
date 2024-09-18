@@ -3,6 +3,7 @@
 use std::{fmt::Display, sync::Arc};
 
 use shipyard::Unique;
+use shipyard_tools::Event;
 use window_handles::WindowHandle;
 
 mod window_handles;
@@ -58,6 +59,38 @@ impl WindowRaw {
 
     pub fn size(&self) -> Size<u32> {
         self.size
+    }
+}
+
+//====================================================================
+
+#[derive(Unique)]
+pub struct WindowSize(Size<u32>);
+
+impl WindowSize {
+    #[inline]
+    pub fn new(size: Size<u32>) -> Self {
+        Self(size)
+    }
+
+    #[inline]
+    pub fn size(&self) -> Size<u32> {
+        self.0
+    }
+}
+
+#[derive(Event)]
+pub struct WindowResizeEvent(Size<u32>);
+
+impl WindowResizeEvent {
+    #[inline]
+    pub fn new(new_size: Size<u32>) -> Self {
+        Self(new_size)
+    }
+
+    #[inline]
+    pub fn size(&self) -> Size<u32> {
+        self.0
     }
 }
 
