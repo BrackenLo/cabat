@@ -11,6 +11,7 @@ pub mod shared;
 #[cfg(feature = "text2d")]
 pub mod text2d_pipeline;
 pub mod texture;
+pub mod texture3d_pipeliners;
 pub mod tools;
 
 //====================================================================
