@@ -116,11 +116,12 @@ impl Iterator for SubStages {
 
 //====================================================================
 
-// TODO - Trait Aliases or custom derive macro
 pub struct WorkloadBuilder<'a> {
     world: &'a shipyard::World,
     workloads: HashMap<Stages, WorkloadToBuild>,
     event_workloads: HashMap<TypeId, shipyard::Workload>,
+
+    plugin_text: String,
 }
 
 struct WorkloadToBuild {
@@ -143,6 +144,8 @@ impl<'a> WorkloadBuilder<'a> {
             world,
             workloads: HashMap::new(),
             event_workloads: HashMap::new(),
+
+            plugin_text: String::new(),
         }
     }
 
@@ -152,10 +155,9 @@ impl<'a> WorkloadBuilder<'a> {
         substage: SubStages,
         workload: shipyard::Workload,
     ) -> Self {
-        log::trace!(
-            "Adding workload for stage '{:?}' - substage {:?}",
-            stage,
-            substage
+        self.plugin_text = format!(
+            "{}\n\tAdding workload for stage '{:?}' - substage {:?}",
+            self.plugin_text, stage, substage
         );
 
         let mut old_workload = self
@@ -213,9 +215,13 @@ impl<'a> WorkloadBuilder<'a> {
         self
     }
 
-    pub fn add_plugin<T: Plugin>(self, plugin: T) -> Self {
-        log::trace!("Adding plugin '{}'", std::any::type_name::<T>());
-        plugin.build(self)
+    pub fn add_plugin<T: Plugin>(mut self, plugin: T) -> Self {
+        self.plugin_text = format!("Adding plugin '{}'", std::any::type_name::<T>());
+        let builder = plugin.build(self);
+
+        log::trace!("{}", builder.plugin_text);
+
+        builder
     }
 
     pub fn build(self) {
