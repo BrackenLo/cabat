@@ -1,8 +1,8 @@
 //====================================================================
 
 use glyphon::{
-    Attrs, Buffer, Cache, FontSystem, Metrics, Resolution, Shaping, SwashCache, TextArea,
-    TextAtlas, TextBounds, TextRenderer, Viewport, Wrap,
+    Attrs, Buffer, Cache, FontSystem, Resolution, Shaping, SwashCache, TextArea, TextAtlas,
+    TextBounds, TextRenderer, Viewport, Wrap,
 };
 use shipyard::{
     AllStoragesView, Component, IntoIter, IntoWorkload, SystemModificator, Unique, View,
@@ -13,6 +13,10 @@ use shipyard_tools::prelude::*;
 use crate::{RenderEncoder, RenderPassDesc};
 
 use super::{Device, Queue, SurfaceConfig};
+
+//====================================================================
+
+pub use glyphon::Metrics;
 
 //====================================================================
 
