@@ -1,7 +1,7 @@
 //====================================================================
 
 use pollster::FutureExt;
-use shipyard::{AllStoragesView, IntoWorkload, SystemModificator, Unique};
+use shipyard::{AllStoragesView, IntoWorkload, SystemModificator, Unique, WorkloadModificator};
 use shipyard_shared::{Size, WindowRaw, WindowResizeEvent, WindowSize};
 use shipyard_tools::{prelude::*, UniqueTools};
 use texture::DepthTexture;
@@ -31,7 +31,8 @@ impl Plugin for RendererPlugin {
                     sys_setup_misc,
                     texture::sys_setup_depth_texture,
                 )
-                    .into_sequential_workload(),
+                    .into_sequential_workload()
+                    .tag("renderer_setup"),
             )
             .add_workload_pre(
                 Stages::Render,
@@ -41,7 +42,10 @@ impl Plugin for RendererPlugin {
                 Stages::Render,
                 (sys_finish_main_render_pass).into_workload(),
             )
-            .add_workload_last(Stages::Render, (sys_submit_encoder).into_workload())
+            .add_workload_last(
+                Stages::Render,
+                (sys_submit_encoder).into_workload().tag("submit_encoder"),
+            )
             .add_event::<WindowResizeEvent>(
                 (
                     sys_resize,
