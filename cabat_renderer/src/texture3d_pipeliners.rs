@@ -103,7 +103,7 @@ impl Texture3dPipeline {
             &[camera_bind_group_layout, &texture_bind_group_layout],
             &[TextureRectVertex::desc(), Texture3dInstanceRaw::desc()],
             include_str!("../shaders/texture3d.wgsl"),
-            render_tools::RenderPipelineDescriptor::default(),
+            render_tools::RenderPipelineDescriptor::default().with_depth_stencil(),
         );
 
         let vertex_buffer =
