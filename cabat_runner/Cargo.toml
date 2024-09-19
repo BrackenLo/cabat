@@ -3,6 +3,9 @@ name = "shipyard_runner"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+debug = []
+
 [dependencies]
 glam = "0.29.0"
 log = "0.4.22"

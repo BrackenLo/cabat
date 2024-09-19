@@ -166,7 +166,21 @@ impl<Builder: AppBuilder> AppInner for DefaultInner<Builder> {
 
         Builder::build(WorkloadBuilder::new(&world)).build();
 
-        world.run_workload(Stages::Setup).unwrap();
+        #[cfg(feature = "debug")]
+        log::debug!("{:#?}", world.workloads_info());
+
+        match world.run_workload(Stages::Setup) {
+            Ok(_) => {}
+            Err(e) => match e {
+                shipyard::error::RunWorkload::Run((system, err)) => {
+                    panic!(
+                        "Workload setup failed to run system '{:?}'.\n\tErr: {:?}",
+                        system, err
+                    )
+                }
+                _ => panic!("Workload setup failed to run: {:?}", e),
+            },
+        }
 
         Self {
             phantom: PhantomData,
