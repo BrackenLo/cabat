@@ -16,7 +16,7 @@ use super::{Device, Queue, SurfaceConfig};
 
 //====================================================================
 
-pub use glyphon::Metrics;
+pub use glyphon::{Color, Metrics};
 
 //====================================================================
 
@@ -161,34 +161,40 @@ fn sys_trim_text_pipeline(mut text_pipeline: ResMut<TextPipeline>) {
 //====================================================================
 
 pub struct TextBufferDescriptor<'a> {
-    pub font_size: f32,
-    pub line_height: f32,
-    pub bounds: TextBounds,
+    pub metrics: Metrics,
+
+    pub bounds_top: i32,
+    pub bounds_bottom: i32,
+    pub bounds_left: i32,
+    pub bounds_right: i32,
     pub word_wrap: Wrap,
 
     pub text: &'a str,
     pub pos: (f32, f32),
     pub width: Option<f32>,
     pub height: Option<f32>,
+
+    pub color: Color,
 }
 
 impl Default for TextBufferDescriptor<'_> {
     fn default() -> Self {
         Self {
-            font_size: 30.,
-            line_height: 42.,
-            bounds: TextBounds {
-                left: 0,
-                top: 0,
-                right: 800,
-                bottom: 300,
-            },
+            metrics: Metrics::relative(30., 1.2),
+
+            bounds_left: 0,
+            bounds_top: 0,
+            bounds_right: 800,
+            bounds_bottom: 300,
+
             word_wrap: Wrap::WordOrGlyph,
 
             text: "",
             pos: (0., 0.),
             width: Some(800.),
             height: None,
+
+            color: glyphon::Color::rgb(0, 0, 0),
         }
     }
 }
@@ -212,10 +218,7 @@ pub struct TextBuffer {
 
 impl TextBuffer {
     pub fn new(text_pipeline: &mut TextPipeline, desc: &TextBufferDescriptor) -> Self {
-        let mut buffer = Buffer::new(
-            &mut text_pipeline.font_system,
-            Metrics::new(desc.font_size, desc.line_height),
-        );
+        let mut buffer = Buffer::new(&mut text_pipeline.font_system, desc.metrics);
 
         buffer.set_text(
             &mut text_pipeline.font_system,
@@ -229,9 +232,14 @@ impl TextBuffer {
 
         Self {
             buffer,
-            bounds: desc.bounds,
+            bounds: TextBounds {
+                left: desc.bounds_left,
+                top: desc.bounds_top,
+                right: desc.bounds_right,
+                bottom: desc.bounds_bottom,
+            },
             pos: desc.pos,
-            color: glyphon::Color::rgb(0, 0, 0),
+            color: desc.color,
         }
     }
 
