@@ -7,11 +7,12 @@ use shipyard_shared::Size;
 use shipyard_tools::{Stages, WorkloadBuilder};
 use winit::{
     application::ApplicationHandler,
-    event::{StartCause, WindowEvent},
+    event::{DeviceEvent, DeviceId, StartCause, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{WindowAttributes, WindowId},
 };
 
+pub mod tools;
 pub mod window;
 
 //====================================================================
@@ -29,16 +30,23 @@ pub trait AppInner {
         event: WindowEvent,
     );
 
+    fn device_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        device_id: DeviceId,
+        event: DeviceEvent,
+    );
+
     fn resumed(&mut self);
 }
 
 //====================================================================
 
-pub struct Runner<Builder: AppBuilder> {
-    inner: Option<DefaultInner<Builder>>,
+pub struct Runner<Inner: AppInner> {
+    inner: Option<Inner>,
 }
 
-impl<Builder: AppBuilder> Runner<Builder> {
+impl<Inner: AppInner> Runner<Inner> {
     pub fn new() -> Self {
         Self { inner: None }
     }
@@ -51,11 +59,11 @@ impl<Builder: AppBuilder> Runner<Builder> {
 
 //--------------------------------------------------
 
-impl<Builder: AppBuilder> ApplicationHandler for Runner<Builder> {
+impl<Inner: AppInner> ApplicationHandler for Runner<Inner> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         log::trace!("App Resumed - Creating inner app");
 
-        self.inner = Some(DefaultInner::new(event_loop));
+        self.inner = Some(Inner::new(event_loop));
     }
 
     fn window_event(
@@ -71,16 +79,13 @@ impl<Builder: AppBuilder> ApplicationHandler for Runner<Builder> {
 
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
         if let Some(inner) = &mut self.inner {
-            match cause {
-                StartCause::ResumeTimeReached { .. } => inner.resumed(),
-                // StartCause::WaitCancelled { start, requested_resume } => todo!(),
-                // StartCause::Poll => todo!(),
-                // StartCause::Init => todo!(),
-                _ => {}
+            if let StartCause::ResumeTimeReached { .. } = cause {
+                inner.resumed()
             }
         }
     }
 
+    // TODO
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: ()) {
         let _ = (event_loop, event);
     }
@@ -91,7 +96,9 @@ impl<Builder: AppBuilder> ApplicationHandler for Runner<Builder> {
         device_id: winit::event::DeviceId,
         event: winit::event::DeviceEvent,
     ) {
-        let _ = (event_loop, device_id, event);
+        if let Some(inner) = &mut self.inner {
+            inner.device_event(event_loop, device_id, event);
+        }
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -191,30 +198,32 @@ impl<Builder: AppBuilder> AppInner for DefaultInner<Builder> {
                 event_loop.set_control_flow(ControlFlow::wait_duration(self.timestep));
             }
 
-            // WindowEvent::KeyboardInput { event, .. } => {
-            //     if let winit::keyboard::PhysicalKey::Code(key) = event.physical_key {
-            //         self.world.run_with_data(
-            //             tools::sys_process_input::<winit::keyboard::KeyCode>,
-            //             (key, event.state.is_pressed()),
-            //         );
-            //     }
-            // }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let winit::keyboard::PhysicalKey::Code(key) = event.physical_key {
+                    self.world.run_with_data(
+                        tools::sys_process_input::<winit::keyboard::KeyCode>,
+                        (key, event.state.is_pressed()),
+                    );
+                }
+            }
 
-            // WindowEvent::MouseInput { state, button, .. } => self.world.run_with_data(
-            //     tools::sys_process_input::<winit::event::MouseButton>,
-            //     (button, state.is_pressed()),
-            // ),
+            WindowEvent::MouseInput { state, button, .. } => self.world.run_with_data(
+                tools::sys_process_input::<winit::event::MouseButton>,
+                (button, state.is_pressed()),
+            ),
 
-            // WindowEvent::CursorMoved { position, .. } => self.world.run_with_data(
-            //     tools::sys_process_mouse_pos,
-            //     [position.x as f32, position.y as f32],
-            // ),
-            // WindowEvent::MouseWheel { delta, .. } => match delta {
-            //     winit::event::MouseScrollDelta::LineDelta(h, v) => {
-            //         self.world.run_with_data(tools::sys_process_wheel, [h, v])
-            //     }
-            //     winit::event::MouseScrollDelta::PixelDelta(_) => {}
-            // },
+            WindowEvent::CursorMoved { position, .. } => self.world.run_with_data(
+                tools::sys_process_mouse_pos,
+                [position.x as f32, position.y as f32],
+            ),
+
+            WindowEvent::MouseWheel { delta, .. } => match delta {
+                winit::event::MouseScrollDelta::LineDelta(h, v) => {
+                    self.world.run_with_data(tools::sys_process_wheel, [h, v])
+                }
+                winit::event::MouseScrollDelta::PixelDelta(_) => {}
+            },
+
             _ => {}
         }
     }
@@ -222,6 +231,15 @@ impl<Builder: AppBuilder> AppInner for DefaultInner<Builder> {
     fn resumed(&mut self) {
         self.world
             .run(|window: shipyard::UniqueView<window::Window>| window.request_redraw());
+    }
+
+    fn device_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        device_id: DeviceId,
+        event: DeviceEvent,
+    ) {
+        let _ = (event_loop, device_id, event);
     }
 }
 
