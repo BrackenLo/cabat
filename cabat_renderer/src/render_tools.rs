@@ -176,7 +176,7 @@ pub fn update_instance_buffer<T: bytemuck::Pod>(
         // Nothing to update
         if *instance_count != 0 {
             // Empty buffer and reset instance count
-            *buffer = create_buffer(device, label, data);
+            *buffer = create_instance_buffer(device, label, data);
             *instance_count = 0;
         }
 
@@ -192,10 +192,14 @@ pub fn update_instance_buffer<T: bytemuck::Pod>(
 
     // Buffer is too small to fit new data. Create a new bigger one.
     *instance_count = data.len() as u32;
-    *buffer = create_buffer(device, label, data);
+    *buffer = create_instance_buffer(device, label, data);
 }
 
-fn create_buffer<T: bytemuck::Pod>(device: &wgpu::Device, label: &str, data: &[T]) -> wgpu::Buffer {
+pub fn create_instance_buffer<T: bytemuck::Pod>(
+    device: &wgpu::Device,
+    label: &str,
+    data: &[T],
+) -> wgpu::Buffer {
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(&format!("{} Instance Buffer", label)),
         contents: bytemuck::cast_slice(data),

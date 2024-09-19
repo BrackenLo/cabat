@@ -4,11 +4,12 @@ use shipyard::Unique;
 use shipyard_tools::prelude::*;
 
 use crate::{
+    render_tools,
     shared::{
         TextureRectVertex, TEXTURE_RECT_INDEX_COUNT, TEXTURE_RECT_INDICES, TEXTURE_RECT_VERTICES,
     },
     texture::Texture,
-    tools, Vertex,
+    Vertex,
 };
 
 //====================================================================
@@ -62,7 +63,7 @@ impl Default for Texture3dInstanceRaw {
 
 //====================================================================
 
-pub struct Texture3dInstance<'a> {
+pub struct Texture3dInstanceToRender<'a> {
     pub texture_bind_group: &'a wgpu::BindGroup,
     pub instance_buffer: &'a wgpu::Buffer,
     pub instance_count: u32,
@@ -89,21 +90,25 @@ impl Texture3dPipeline {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Texture 3d Bind Group Layout"),
-                entries: &[tools::bgl_texture_entry(0), tools::bgl_sampler_entry(1)],
+                entries: &[
+                    render_tools::bgl_texture_entry(0),
+                    render_tools::bgl_sampler_entry(1),
+                ],
             });
 
-        let pipeline = tools::create_pipeline(
+        let pipeline = render_tools::create_pipeline(
             device,
             config,
             "Texture 3d Pipeline",
             &[camera_bind_group_layout, &texture_bind_group_layout],
             &[TextureRectVertex::desc(), Texture3dInstanceRaw::desc()],
             include_str!("../shaders/texture3d.wgsl"),
-            tools::RenderPipelineDescriptor::default(),
+            render_tools::RenderPipelineDescriptor::default(),
         );
 
-        let vertex_buffer = tools::vertex_buffer(device, "Texture 3d", &TEXTURE_RECT_VERTICES);
-        let index_buffer = tools::index_buffer(device, "Texture 3d", &TEXTURE_RECT_INDICES);
+        let vertex_buffer =
+            render_tools::vertex_buffer(device, "Texture 3d", &TEXTURE_RECT_VERTICES);
+        let index_buffer = render_tools::index_buffer(device, "Texture 3d", &TEXTURE_RECT_INDICES);
         let index_count = TEXTURE_RECT_INDEX_COUNT;
 
         Self {
@@ -141,7 +146,7 @@ impl Texture3dPipeline {
         &self,
         pass: &mut wgpu::RenderPass,
         camera_bind_group: &wgpu::BindGroup,
-        instances: &[Texture3dInstance],
+        instances: &[Texture3dInstanceToRender],
     ) {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, camera_bind_group, &[]);

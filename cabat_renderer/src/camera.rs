@@ -231,6 +231,23 @@ impl PerspectiveCamera {
 
         (projection_matrix * view_matrix).to_cols_array()
     }
+
+    pub fn forward(&self) -> glam::Vec3 {
+        let (x, _, z) = (self.rotation * glam::Vec3::Z).into();
+        glam::Vec3::new(x, 0., z).normalize()
+    }
+
+    pub fn right(&self) -> glam::Vec3 {
+        let (x, _, z) = (self.rotation * glam::Vec3::X).into();
+        glam::Vec3::new(x, 0., z).normalize()
+    }
+
+    pub fn rotate_camera(&mut self, yaw: f32, pitch: f32) {
+        let yaw_rotation = glam::Quat::from_rotation_y(yaw);
+        let pitch_rotation = glam::Quat::from_rotation_x(pitch);
+
+        self.rotation = yaw_rotation * self.rotation * pitch_rotation;
+    }
 }
 
 //====================================================================
