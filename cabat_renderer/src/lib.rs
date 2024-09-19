@@ -16,7 +16,7 @@ pub mod tools;
 
 //====================================================================
 
-pub struct RendererPlugin {}
+pub struct RendererPlugin;
 
 impl Plugin for RendererPlugin {
     fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
@@ -209,6 +209,12 @@ fn sys_resize(
 #[derive(Unique)]
 pub struct RenderPass {
     pass: wgpu::RenderPass<'static>,
+}
+
+impl RenderPass {
+    pub fn pass(&mut self) -> &mut wgpu::RenderPass<'static> {
+        &mut self.pass
+    }
 }
 
 pub struct RenderPassDesc<'a> {

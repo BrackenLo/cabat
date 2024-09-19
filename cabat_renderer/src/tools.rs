@@ -45,6 +45,11 @@ impl RenderPipelineDescriptor<'_> {
 
         self
     }
+
+    pub fn with_backface_culling(mut self) -> Self {
+        self.primitive.cull_mode = Some(wgpu::Face::Back);
+        self
+    }
 }
 
 pub fn create_pipeline(

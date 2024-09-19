@@ -11,7 +11,7 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new<C: CameraUniform>(device: &wgpu::Device, camera: C) -> Self {
+    pub fn new<C: CameraUniform>(device: &wgpu::Device, camera: &C) -> Self {
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera buffer"),
             contents: bytemuck::cast_slice(&[camera.into_uniform()]),
@@ -50,7 +50,7 @@ impl Camera {
     }
 
     #[inline]
-    pub fn update_camera<C: CameraUniform>(&self, queue: &wgpu::Queue, camera: C) {
+    pub fn update_camera<C: CameraUniform>(&self, queue: &wgpu::Queue, camera: &C) {
         queue.write_buffer(
             &self.camera_buffer,
             0,
@@ -94,7 +94,7 @@ impl CameraUniformRaw {
 
 //--------------------------------------------------
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OrthographicCamera {
     pub left: f32,
     pub right: f32,
@@ -186,6 +186,7 @@ impl OrthographicCamera {
 
 //--------------------------------------------------
 
+#[derive(Debug, Clone)]
 pub struct PerspectiveCamera {
     pub up: glam::Vec3,
     pub aspect: f32,
