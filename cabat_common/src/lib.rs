@@ -2,8 +2,8 @@
 
 use std::{fmt::Display, sync::Arc};
 
+use cabat_shipyard::Event;
 use shipyard::Unique;
-use shipyard_tools::Event;
 use window_handles::WindowHandle;
 
 mod window_handles;

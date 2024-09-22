@@ -1,9 +1,9 @@
 //====================================================================
 
+use cabat_common::{Size, WindowRaw, WindowResizeEvent, WindowSize};
+use cabat_shipyard::{prelude::*, UniqueTools};
 use pollster::FutureExt;
 use shipyard::{AllStoragesView, IntoWorkload, SystemModificator, Unique, WorkloadModificator};
-use shipyard_shared::{Size, WindowRaw, WindowResizeEvent, WindowSize};
-use shipyard_tools::{prelude::*, UniqueTools};
 use texture::DepthTexture;
 
 pub mod camera;

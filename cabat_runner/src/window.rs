@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
+use cabat_common::{Size, WindowRaw, WindowResizeEvent, WindowSize};
+use cabat_shipyard::{EventHandler, ResMut, UniqueTools};
 use shipyard::{AllStoragesView, Unique};
-use shipyard_shared::{Size, WindowRaw, WindowResizeEvent, WindowSize};
-use shipyard_tools::{EventHandler, ResMut, UniqueTools};
 
 //====================================================================
 

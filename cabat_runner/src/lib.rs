@@ -2,9 +2,9 @@
 
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
+use cabat_common::Size;
+use cabat_shipyard::{Stages, WorkloadBuilder};
 use shipyard::World;
-use shipyard_shared::Size;
-use shipyard_tools::{Stages, WorkloadBuilder};
 use winit::{
     application::ApplicationHandler,
     event::{DeviceEvent, DeviceId, StartCause, WindowEvent},
@@ -141,7 +141,7 @@ impl<Builder: AppBuilder> DefaultInner<Builder> {
     fn tick(&mut self) {
         self.world.run_workload(Stages::First).unwrap();
 
-        shipyard_tools::activate_events(&self.world);
+        cabat_shipyard::activate_events(&self.world);
 
         // TODO
         // self.world.run_workload(Stages::FixedUpdate).unwrap();

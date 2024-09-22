@@ -1,0 +1,23 @@
+[package]
+name = "cabat"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = [
+  "cabat_proc",
+  "cabat_shipyard",
+  "cabat_common",
+  "cabat_renderer",
+  "cabat_runner",
+]
+
+[workspace.dependencies]
+log = "0.4.22"
+shipyard = "0.7"
+
+[dependencies]
+cabat_shipyard.path = "cabat_shipyard"
+cabat_common.path = "cabat_common"
+cabat_renderer.path = "cabat_renderer"
+cabat_runner.path = "cabat_runner"

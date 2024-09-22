@@ -1,14 +1,11 @@
 [package]
-name = "shipyard_tools"
+name = "cabat_shipyard"
 version = "0.1.0"
 edition = "2021"
-
-[workspace]
-members = ["proc"]
 
 [dependencies]
 downcast = "0.11.0"
 enum-iterator = "2.1.0"
-log = "0.4.22"
-proc = { path = "proc/" }
-shipyard = "0.7"
+log.workspace = true
+cabat_proc = { path = "../cabat_proc/" }
+shipyard.workspace = true

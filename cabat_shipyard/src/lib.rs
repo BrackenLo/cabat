@@ -301,7 +301,7 @@ pub trait Plugin {
 
 //====================================================================
 
-pub use proc::Event;
+pub use cabat_proc::Event;
 pub trait Event: Send + Sync + downcast::AnySync {}
 
 #[derive(Unique, Default)]

@@ -1,9 +1,9 @@
 //====================================================================
 
+use cabat_common::{Size, WindowSize};
+use cabat_shipyard::{Res, ResMut};
 use image::GenericImageView;
 use shipyard::AllStoragesView;
-use shipyard_shared::{Size, WindowSize};
-use shipyard_tools::{Res, ResMut};
 
 use crate::Device;
 

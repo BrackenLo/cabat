@@ -1,5 +1,7 @@
 //====================================================================
 
+use cabat_common::{WindowResizeEvent, WindowSize};
+use cabat_shipyard::prelude::*;
 use glyphon::{
     Attrs, Buffer, Cache, FontSystem, Resolution, Shaping, SwashCache, TextArea, TextAtlas,
     TextBounds, TextRenderer, Viewport, Wrap,
@@ -7,8 +9,6 @@ use glyphon::{
 use shipyard::{
     AllStoragesView, Component, IntoIter, IntoWorkload, SystemModificator, Unique, View,
 };
-use shipyard_shared::{WindowResizeEvent, WindowSize};
-use shipyard_tools::prelude::*;
 
 use crate::{RenderEncoder, RenderPassDesc};
 
