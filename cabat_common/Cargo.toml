@@ -1,0 +1,10 @@
+[package]
+name = "shipyard_shared"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.22"
+raw-window-handle = "0.6.2"
+shipyard = "0.7"
+shipyard_tools = { git = "http://192.168.68.104:3000/BrackenLo/shipyard_tools.git", version = "0.1.0" }
