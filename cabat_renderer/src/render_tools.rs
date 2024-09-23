@@ -20,10 +20,7 @@ pub struct RenderPipelineDescriptor<'a> {
 impl<'a> Default for RenderPipelineDescriptor<'a> {
     fn default() -> Self {
         Self {
-            primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
-            },
+            primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: Default::default(),
             fragment_targets: None,

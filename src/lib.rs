@@ -11,9 +11,9 @@ pub mod common {
 pub mod renderer {
     pub use cabat_renderer::{
         camera::{Camera, CameraUniform, OrthographicCamera, PerspectiveCamera},
-        render_tools, shared, text2d_pipeline, texture, texture3d_pipeliners, ClearColor, Device,
-        Queue, RenderEncoder, RenderPass, RenderPassDesc, RendererPlugin, Surface, SurfaceConfig,
-        Vertex,
+        crates, plugins, render_tools, shared, text2d_pipeline, texture, texture3d_pipeliners,
+        ClearColor, Device, FullRendererPlugin, Queue, RenderEncoder, RenderPass, RenderPassDesc,
+        Surface, SurfaceConfig, Vertex,
     };
 }
 
@@ -44,7 +44,7 @@ impl Plugin for DefaultPlugins {
     ) -> cabat_shipyard::WorkloadBuilder {
         workload_builder
             .add_plugin(runner::ToolsPlugin)
-            .add_plugin(renderer::RendererPlugin)
+            .add_plugin(renderer::FullRendererPlugin)
     }
 }
 

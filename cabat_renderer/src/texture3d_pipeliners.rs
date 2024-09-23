@@ -1,6 +1,5 @@
 //====================================================================
 
-use cabat_shipyard::prelude::*;
 use shipyard::Unique;
 
 use crate::{
@@ -11,16 +10,6 @@ use crate::{
     texture::Texture,
     Vertex,
 };
-
-//====================================================================
-
-pub struct Texture3dPlugin;
-
-impl Plugin for Texture3dPlugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        workload_builder
-    }
-}
 
 //====================================================================
 
@@ -103,7 +92,9 @@ impl Texture3dPipeline {
             &[camera_bind_group_layout, &texture_bind_group_layout],
             &[TextureRectVertex::desc(), Texture3dInstanceRaw::desc()],
             include_str!("../shaders/texture3d.wgsl"),
-            render_tools::RenderPipelineDescriptor::default().with_depth_stencil(),
+            render_tools::RenderPipelineDescriptor::default()
+                .with_depth_stencil()
+                .with_backface_culling(),
         );
 
         let vertex_buffer =

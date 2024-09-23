@@ -9,20 +9,38 @@ use texture::DepthTexture;
 pub mod camera;
 pub mod render_tools;
 pub mod shared;
-#[cfg(feature = "text2d")]
 pub mod text2d_pipeline;
 pub mod texture;
 pub mod texture3d_pipeliners;
 
 //====================================================================
 
-pub struct RendererPlugin;
+pub mod plugins {
+    pub use crate::{text2d_pipeline::Text2dPlugin, CoreRendererPlugin};
+}
 
-impl Plugin for RendererPlugin {
+pub mod crates {
+    pub use wgpu;
+}
+
+//--------------------------------------------------
+
+pub struct FullRendererPlugin;
+
+impl Plugin for FullRendererPlugin {
     fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        #[cfg(feature = "text2d")]
-        let workload_builder = workload_builder.add_plugin(text2d_pipeline::Text2dPlugin);
+        workload_builder
+            .add_plugin(CoreRendererPlugin)
+            .add_plugin(plugins::Text2dPlugin)
+    }
+}
 
+//====================================================================
+
+pub struct CoreRendererPlugin;
+
+impl Plugin for CoreRendererPlugin {
+    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
         workload_builder
             .add_workload_first(
                 Stages::Setup,

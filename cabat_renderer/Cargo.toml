@@ -3,16 +3,12 @@ name = "cabat_renderer"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-default = ["text2d"]
-text2d = ["glyphon"]
-
 [dependencies]
 bytemuck = { version = "1.18.0", features = ["derive"] }
 cabat_common = { path = "../cabat_common", version = "0.1.0" }
 cabat_shipyard = { path = "../cabat_shipyard", version = "0.1.0" }
 glam = "0.29.0"
-glyphon = { git = "https://github.com/grovesNL/glyphon.git", version = "0.6.0", optional = true }
+glyphon = { git = "https://github.com/grovesNL/glyphon.git", version = "0.6.0" }
 image = "0.25.2"
 log.workspace = true
 pollster = "0.3.0"

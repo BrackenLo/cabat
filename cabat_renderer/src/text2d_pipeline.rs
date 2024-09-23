@@ -8,6 +8,7 @@ use glyphon::{
 };
 use shipyard::{
     AllStoragesView, Component, IntoIter, IntoWorkload, SystemModificator, Unique, View,
+    WorkloadModificator,
 };
 
 use crate::{RenderEncoder, RenderPassDesc};
@@ -25,7 +26,12 @@ pub struct Text2dPlugin;
 impl Plugin for Text2dPlugin {
     fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
         workload_builder
-            .add_workload_pre(Stages::Setup, (sys_setup_text_pipeline).into_workload())
+            .add_workload_first(
+                Stages::Setup,
+                (sys_setup_text_pipeline)
+                    .into_workload()
+                    .after_all("renderer_setup"),
+            )
             .add_workload_last(Stages::Update, (sys_prep_text).into_workload())
             .add_workload_post(
                 Stages::Render,
@@ -51,10 +57,11 @@ pub struct TextPipeline {
 }
 
 impl TextPipeline {
-    fn new(device: &wgpu::Device, queue: &wgpu::Queue, config: &wgpu::SurfaceConfiguration) -> Self
-    where
-        Self: Sized,
-    {
+    fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> Self {
         let cache = Cache::new(device);
         let font_system = FontSystem::new();
         let swash_cache = SwashCache::new();
