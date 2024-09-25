@@ -1,14 +1,13 @@
 //====================================================================
 
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use cabat_common::Size;
 use cabat_shipyard::{Stages, WorkloadBuilder};
-use shipyard::World;
 use winit::{
     application::ApplicationHandler,
     event::{DeviceEvent, DeviceId, StartCause, WindowEvent},
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    event_loop::{ActiveEventLoop, EventLoop},
     window::{WindowAttributes, WindowId},
 };
 
@@ -17,53 +16,51 @@ pub mod window;
 
 //====================================================================
 
-pub trait AppBuilder {
-    fn build(builder: WorkloadBuilder) -> WorkloadBuilder;
+enum RunnerState {
+    Waiting(shipyard::World),
+    Running(RunnerInner),
 }
 
-pub trait AppInner {
-    fn new(event_loop: &ActiveEventLoop) -> Self;
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        window_id: WindowId,
-        event: WindowEvent,
-    );
-
-    fn device_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        device_id: DeviceId,
-        event: DeviceEvent,
-    );
-
-    fn resumed(&mut self);
+pub struct Runner {
+    state: RunnerState,
 }
 
-//====================================================================
+impl Runner {
+    pub fn run<F>(build_app: F)
+    where
+        F: FnOnce(WorkloadBuilder) -> WorkloadBuilder,
+    {
+        let world = shipyard::World::new();
+        let builder = WorkloadBuilder::new(&world);
+        build_app(builder).build();
 
-pub struct Runner<Inner: AppInner> {
-    inner: Option<Inner>,
-}
+        let mut runner = Self {
+            state: RunnerState::Waiting(world),
+        };
 
-impl<Inner: AppInner> Runner<Inner> {
-    pub fn new() -> Self {
-        Self { inner: None }
-    }
-
-    pub fn run(mut self) {
         let event_loop = EventLoop::new().unwrap();
-        event_loop.run_app(&mut self).unwrap();
+        event_loop.run_app(&mut runner).unwrap();
     }
 }
 
-//--------------------------------------------------
-
-impl<Inner: AppInner> ApplicationHandler for Runner<Inner> {
+impl ApplicationHandler for Runner {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         log::trace!("App Resumed - Creating inner app");
 
-        self.inner = Some(Inner::new(event_loop));
+        let world = match &mut self.state {
+            RunnerState::Waiting(world) => {
+                let mut new_world = shipyard::World::new();
+                std::mem::swap(world, &mut new_world);
+                new_world
+            }
+            RunnerState::Running(..) => {
+                log::warn!("Application resumed again...");
+                return;
+            }
+        };
+
+        let inner = RunnerInner::new(event_loop, world);
+        self.state = RunnerState::Running(inner);
     }
 
     fn window_event(
@@ -72,13 +69,13 @@ impl<Inner: AppInner> ApplicationHandler for Runner<Inner> {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        if let Some(inner) = &mut self.inner {
+        if let RunnerState::Running(inner) = &mut self.state {
             inner.window_event(event_loop, window_id, event);
-        }
+        };
     }
 
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
-        if let Some(inner) = &mut self.inner {
+        if let RunnerState::Running(inner) = &mut self.state {
             if let StartCause::ResumeTimeReached { .. } = cause {
                 inner.resumed()
             }
@@ -93,10 +90,10 @@ impl<Inner: AppInner> ApplicationHandler for Runner<Inner> {
     fn device_event(
         &mut self,
         event_loop: &ActiveEventLoop,
-        device_id: winit::event::DeviceId,
-        event: winit::event::DeviceEvent,
+        device_id: DeviceId,
+        event: DeviceEvent,
     ) {
-        if let Some(inner) = &mut self.inner {
+        if let RunnerState::Running(inner) = &mut self.state {
             inner.device_event(event_loop, device_id, event);
         }
     }
@@ -122,40 +119,13 @@ impl<Inner: AppInner> ApplicationHandler for Runner<Inner> {
 
 const TIMESTEP: f32 = 1. / 75.;
 
-pub struct DefaultInner<Builder: AppBuilder> {
-    phantom: PhantomData<Builder>,
-    world: World,
+pub struct RunnerInner {
+    world: shipyard::World,
     timestep: Duration,
 }
 
-impl<Builder: AppBuilder> DefaultInner<Builder> {
-    fn resize(&mut self, new_size: Size<u32>) {
-        if new_size.width == 0 || new_size.height == 0 {
-            log::warn!("Resize width or height of '0' provided");
-            return;
-        }
-
-        self.world.run_with_data(window::sys_resize, new_size);
-    }
-
-    fn tick(&mut self) {
-        self.world.run_workload(Stages::First).unwrap();
-
-        cabat_shipyard::activate_events(&self.world);
-
-        // TODO
-        // self.world.run_workload(Stages::FixedUpdate).unwrap();
-
-        self.world.run_workload(Stages::Update).unwrap();
-        self.world.run_workload(Stages::Render).unwrap();
-        self.world.run_workload(Stages::Last).unwrap();
-    }
-}
-
-impl<Builder: AppBuilder> AppInner for DefaultInner<Builder> {
-    fn new(event_loop: &ActiveEventLoop) -> Self {
-        let world = shipyard::World::new();
-
+impl RunnerInner {
+    fn new(event_loop: &ActiveEventLoop, world: shipyard::World) -> Self {
         let window = Arc::new(
             event_loop
                 .create_window(WindowAttributes::default())
@@ -163,11 +133,6 @@ impl<Builder: AppBuilder> AppInner for DefaultInner<Builder> {
         );
 
         world.run_with_data(window::sys_add_window, window);
-
-        Builder::build(WorkloadBuilder::new(&world)).build();
-
-        #[cfg(feature = "debug")]
-        log::debug!("{:#?}", world.workloads_info());
 
         match world.run_workload(Stages::Setup) {
             Ok(_) => {}
@@ -183,12 +148,12 @@ impl<Builder: AppBuilder> AppInner for DefaultInner<Builder> {
         }
 
         Self {
-            phantom: PhantomData,
             world,
             timestep: Duration::from_secs_f32(TIMESTEP),
         }
     }
 
+    // TODO
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -209,7 +174,8 @@ impl<Builder: AppBuilder> AppInner for DefaultInner<Builder> {
             WindowEvent::RedrawRequested => {
                 self.tick();
 
-                event_loop.set_control_flow(ControlFlow::wait_duration(self.timestep));
+                event_loop
+                    .set_control_flow(winit::event_loop::ControlFlow::wait_duration(self.timestep));
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
@@ -247,6 +213,7 @@ impl<Builder: AppBuilder> AppInner for DefaultInner<Builder> {
             .run(|window: shipyard::UniqueView<window::Window>| window.request_redraw());
     }
 
+    // TODO
     fn device_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -254,6 +221,30 @@ impl<Builder: AppBuilder> AppInner for DefaultInner<Builder> {
         event: DeviceEvent,
     ) {
         let _ = (event_loop, device_id, event);
+    }
+}
+
+impl RunnerInner {
+    fn resize(&mut self, new_size: Size<u32>) {
+        if new_size.width == 0 || new_size.height == 0 {
+            log::warn!("Resize width or height of '0' provided");
+            return;
+        }
+
+        self.world.run_with_data(window::sys_resize, new_size);
+    }
+
+    fn tick(&mut self) {
+        self.world.run_workload(Stages::First).unwrap();
+
+        cabat_shipyard::activate_events(&self.world);
+
+        // TODO
+        // self.world.run_workload(Stages::FixedUpdate).unwrap();
+
+        self.world.run_workload(Stages::Update).unwrap();
+        self.world.run_workload(Stages::Render).unwrap();
+        self.world.run_workload(Stages::Last).unwrap();
     }
 }
 
