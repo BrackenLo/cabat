@@ -9,14 +9,14 @@ use texture::DepthTexture;
 pub mod camera;
 pub mod render_tools;
 pub mod shared;
-pub mod text2d_pipeline;
+pub mod text;
 pub mod texture;
 pub mod texture3d_pipeliners;
 
 //====================================================================
 
 pub mod plugins {
-    pub use crate::{text2d_pipeline::Text2dPlugin, CoreRendererPlugin};
+    pub use crate::{text::Text2dPlugin, CoreRendererPlugin};
 }
 
 pub mod crates {

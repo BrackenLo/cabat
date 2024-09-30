@@ -201,6 +201,73 @@ impl Texture {
             sampler,
         }
     }
+
+    pub fn from_size(
+        device: &wgpu::Device,
+        size: Size<u32>,
+        label: Option<&str>,
+        sampler: Option<&wgpu::SamplerDescriptor>,
+    ) -> Self {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label,
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(sampler.unwrap_or(&wgpu::SamplerDescriptor::default()));
+
+        Self {
+            texture,
+            view,
+            sampler,
+        }
+    }
+}
+
+impl Texture {
+    pub fn update_area(
+        &mut self,
+        queue: &wgpu::Queue,
+        data: &[u8],
+        start_x: u32,
+        start_y: u32,
+        data_width: u32,
+        data_height: u32,
+    ) {
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: start_x,
+                    y: start_y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(data_width),
+                rows_per_image: None, //Some(data_height),
+            },
+            wgpu::Extent3d {
+                width: data_width,
+                height: data_height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
 }
 
 //====================================================================

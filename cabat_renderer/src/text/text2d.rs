@@ -11,9 +11,7 @@ use shipyard::{
     WorkloadModificator,
 };
 
-use crate::{RenderEncoder, RenderPassDesc};
-
-use super::{Device, Queue, SurfaceConfig};
+use crate::{Device, Queue, RenderEncoder, RenderPassDesc, SurfaceConfig};
 
 //====================================================================
 
@@ -37,7 +35,7 @@ impl Plugin for Text2dPlugin {
                 Stages::Render,
                 (sys_render
                     .skip_if_missing_unique::<RenderEncoder>()
-                    .after_all(super::sys_finish_main_render_pass))
+                    .after_all(crate::sys_finish_main_render_pass))
                 .into_workload(),
             )
             .add_workload(Stages::Last, (sys_trim_text_pipeline).into_workload())
@@ -136,7 +134,7 @@ fn sys_prep_text(
     queue: Res<Queue>,
 
     mut text_pipeline: ResMut<TextPipeline>,
-    v_buffers: View<TextBuffer>,
+    v_buffers: View<Text2dBuffer>,
 ) {
     let data = v_buffers
         .iter()
@@ -167,7 +165,7 @@ fn sys_trim_text_pipeline(mut text_pipeline: ResMut<TextPipeline>) {
 
 //====================================================================
 
-pub struct TextBufferDescriptor<'a> {
+pub struct Text2dBufferDescriptor<'a> {
     pub metrics: Metrics,
 
     pub bounds_top: i32,
@@ -184,7 +182,7 @@ pub struct TextBufferDescriptor<'a> {
     pub color: Color,
 }
 
-impl Default for TextBufferDescriptor<'_> {
+impl Default for Text2dBufferDescriptor<'_> {
     fn default() -> Self {
         Self {
             metrics: Metrics::relative(30., 1.2),
@@ -206,7 +204,7 @@ impl Default for TextBufferDescriptor<'_> {
     }
 }
 
-impl<'a> TextBufferDescriptor<'a> {
+impl<'a> Text2dBufferDescriptor<'a> {
     pub fn new_text(text: &'a str) -> Self {
         Self {
             text,
@@ -216,15 +214,15 @@ impl<'a> TextBufferDescriptor<'a> {
 }
 
 #[derive(Component)]
-pub struct TextBuffer {
+pub struct Text2dBuffer {
     pub buffer: Buffer,
     pub bounds: TextBounds,
     pub pos: (f32, f32),
     pub color: glyphon::Color,
 }
 
-impl TextBuffer {
-    pub fn new(text_pipeline: &mut TextPipeline, desc: &TextBufferDescriptor) -> Self {
+impl Text2dBuffer {
+    pub fn new(text_pipeline: &mut TextPipeline, desc: &Text2dBufferDescriptor) -> Self {
         let mut buffer = Buffer::new(&mut text_pipeline.font_system, desc.metrics);
 
         buffer.set_text(
