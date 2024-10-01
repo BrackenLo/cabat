@@ -21,3 +21,9 @@ cabat_shipyard.path = "cabat_shipyard"
 cabat_common.path = "cabat_common"
 cabat_renderer.path = "cabat_renderer"
 cabat_runner.path = "cabat_runner"
+
+[dev-dependencies]
+env_logger = "0.11.5"
+glam = "0.29.0"
+log.workspace = true
+shipyard.workspace = true

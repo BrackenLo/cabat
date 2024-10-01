@@ -1,6 +1,9 @@
 //====================================================================
 
-use cosmic_text::{Attrs, Buffer, FontSystem, Metrics, Shaping, SwashCache};
+use std::hash::{Hash, Hasher};
+
+use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache};
+use rustc_hash::FxHasher;
 use shipyard::{Component, Unique};
 use wgpu::util::DeviceExt;
 
@@ -83,7 +86,6 @@ impl Text3dRenderer {
             render_tools::RenderPipelineDescriptor {
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleStrip,
-                    strip_index_format: Some(wgpu::IndexFormat::Uint16),
                     cull_mode: Some(wgpu::Face::Back),
                     ..Default::default()
                 },
@@ -107,14 +109,15 @@ impl Text3dRenderer {
     {
         buffers.into_iter().for_each(|text3d_buffer| {
             text3d_buffer.text_buffer.layout_runs().for_each(|run| {
-                let glyph_vertices = run
+                let mut hasher = FxHasher::default();
+
+                let cache_keys = run
                     .glyphs
                     .iter()
                     .filter_map(|glyph| {
                         let physical = glyph.physical((0., 0.), 1.);
 
-                        let data = self
-                            .atlas
+                        self.atlas
                             .use_glyph(
                                 device,
                                 queue,
@@ -124,27 +127,43 @@ impl Text3dRenderer {
                             )
                             .ok()?;
 
-                        let color = cosmic_text::Color::rgb(1, 1, 1);
-                        let color = color.0;
+                        physical.cache_key.hash(&mut hasher);
+                        text3d_buffer.color.hash(&mut hasher);
 
-                        Some(Text3dVertex {
-                            glyph_pos: [physical.x as f32, physical.y as f32],
-                            glyph_size: data.size,
-                            uv_start: data.uv_start,
-                            uv_end: data.uv_end,
-                            color,
-                        })
+                        Some((physical.cache_key, physical.x, physical.y))
                     })
                     .collect::<Vec<_>>();
 
-                render_tools::update_instance_buffer(
-                    device,
-                    queue,
-                    "Text3d Vertex Buffer",
-                    &mut text3d_buffer.vertex_buffer,
-                    &mut text3d_buffer.vertex_count,
-                    &glyph_vertices,
-                );
+                let vertex_hash = hasher.finish();
+
+                if vertex_hash != text3d_buffer.vertex_hash {
+                    println!("Updating text vertives");
+
+                    let glyph_vertices = cache_keys
+                        .into_iter()
+                        .map(|(key, x, y)| {
+                            let data = self.atlas.get_glyph_data(&key).unwrap();
+                            Text3dVertex {
+                                glyph_pos: [x as f32, y as f32],
+                                glyph_size: data.size,
+                                uv_start: data.uv_start,
+                                uv_end: data.uv_end,
+                                color: text3d_buffer.color.0,
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    render_tools::update_instance_buffer(
+                        device,
+                        queue,
+                        "Text3d Vertex Buffer",
+                        &mut text3d_buffer.vertex_buffer,
+                        &mut text3d_buffer.vertex_count,
+                        &glyph_vertices,
+                    );
+
+                    text3d_buffer.vertex_hash = vertex_hash;
+                }
             });
         });
     }
@@ -175,10 +194,12 @@ impl Text3dRenderer {
 pub struct Text3dBuffer {
     vertex_buffer: wgpu::Buffer,
     vertex_count: u32,
+    vertex_hash: u64,
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
 
     pub text_buffer: Buffer,
+    pub color: Color,
 }
 
 impl Text3dBuffer {
@@ -222,18 +243,21 @@ impl Text3dBuffer {
         text_buffer.set_text(
             &mut text3d_renderer.font_system,
             "Hello World!",
-            // "H",
             Attrs::new(),
             Shaping::Advanced,
         );
 
+        let color = Color::rgb(255, 255, 255);
+
         Self {
             vertex_buffer,
             vertex_count,
+            vertex_hash: 0,
             uniform_buffer,
             uniform_bind_group,
 
             text_buffer,
+            color,
         }
     }
 }

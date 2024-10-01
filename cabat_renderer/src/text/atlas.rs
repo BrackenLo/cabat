@@ -151,6 +151,11 @@ impl TextAtlas {
         }
     }
 
+    #[inline]
+    pub fn get_glyph_data(&mut self, key: &CacheKey) -> Option<&GlyphData> {
+        self.cached_glyphs.get(key)
+    }
+
     fn cache_glypyh(
         &mut self,
         device: &wgpu::Device,
