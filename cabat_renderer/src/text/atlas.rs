@@ -28,9 +28,12 @@ impl Display for CacheGlyphError {
 
 pub(super) struct GlyphData {
     alloc_id: AllocId,
-    pub size: [f32; 2],
     pub uv_start: [f32; 2],
     pub uv_end: [f32; 2],
+    pub left: f32,
+    pub top: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 type Hasher = BuildHasherDefault<FxHasher>;
@@ -183,8 +186,6 @@ impl TextAtlas {
         self.texture
             .update_area(queue, &image.data, x, y, image_width, image_height);
 
-        let size = [image_width as f32, image_height as f32];
-
         let uv_start = [
             allocation.rectangle.min.x as f32 / self.texture_size.width as f32,
             allocation.rectangle.min.y as f32 / self.texture_size.height as f32,
@@ -194,6 +195,11 @@ impl TextAtlas {
             allocation.rectangle.max.x as f32 / self.texture_size.width as f32,
             allocation.rectangle.max.y as f32 / self.texture_size.height as f32,
         ];
+
+        let left = image.placement.left as f32;
+        let top = image.placement.top as f32;
+        let width = image.placement.width as f32;
+        let height = image.placement.height as f32;
 
         log::trace!(
             "Allocated glyph id {:?}, with size {:?} and uv ({:?}, {:?})",
@@ -205,9 +211,12 @@ impl TextAtlas {
 
         let glyph_data = GlyphData {
             alloc_id: allocation.id,
-            size,
             uv_start,
             uv_end,
+            left,
+            top,
+            width,
+            height,
         };
 
         self.cached_glyphs.put(*key, glyph_data);

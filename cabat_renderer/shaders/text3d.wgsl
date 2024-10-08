@@ -12,8 +12,8 @@ struct Instance {
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 
-@group(1) @binding(0) var texture: texture_2d<f32>;
-@group(1) @binding(1) var texture_sampler: sampler;
+@group(1) @binding(0) var atlas_texture: texture_2d<f32>;
+@group(1) @binding(1) var atlas_texture_sampler: sampler;
 
 @group(2) @binding(0) var<uniform> instance: Instance;
 
@@ -92,9 +92,9 @@ fn vs_main(in: VertexIn) -> VertexOut {
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    let tex_color = textureSample(texture, texture_sampler, in.uv);
+    let tex_color = textureSample(atlas_texture, atlas_texture_sampler, in.uv);
     
-    return tex_color;// * in.color;
+    return vec4<f32>(in.color.xyz, in.color.w * tex_color.x);
 }
 
 //====================================================================

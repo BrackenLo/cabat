@@ -2,7 +2,7 @@
 
 use std::hash::{Hash, Hasher};
 
-use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache};
+use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache, Wrap};
 use rustc_hash::FxHasher;
 use shipyard::{Component, Unique};
 use wgpu::util::DeviceExt;
@@ -89,6 +89,11 @@ impl Text3dRenderer {
                     cull_mode: Some(wgpu::Face::Back),
                     ..Default::default()
                 },
+                fragment_targets: Some(&[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::all(),
+                })]),
                 ..Default::default()
             }
             .with_depth_stencil(),
@@ -137,15 +142,20 @@ impl Text3dRenderer {
                 let vertex_hash = hasher.finish();
 
                 if vertex_hash != text3d_buffer.vertex_hash {
-                    println!("Updating text vertives");
+                    println!("Updating text vertives {}", vertex_hash);
+                    text3d_buffer.vertex_hash = vertex_hash;
 
                     let glyph_vertices = cache_keys
                         .into_iter()
                         .map(|(key, x, y)| {
                             let data = self.atlas.get_glyph_data(&key).unwrap();
+
+                            let x = x as f32 + data.left + data.width / 2.;
+                            let y = y as f32 + data.top + run.line_y;
+
                             Text3dVertex {
-                                glyph_pos: [x as f32, y as f32],
-                                glyph_size: data.size,
+                                glyph_pos: [x, y],
+                                glyph_size: [data.width, data.height],
                                 uv_start: data.uv_start,
                                 uv_end: data.uv_end,
                                 color: text3d_buffer.color.0,
@@ -161,8 +171,6 @@ impl Text3dRenderer {
                         &mut text3d_buffer.vertex_count,
                         &glyph_vertices,
                     );
-
-                    text3d_buffer.vertex_hash = vertex_hash;
                 }
             });
         });
@@ -190,6 +198,38 @@ impl Text3dRenderer {
 
 //====================================================================
 
+pub struct Text3dBufferDescriptor<'a> {
+    pub metrics: Metrics,
+    pub word_wrap: Wrap,
+    pub attributes: Attrs<'a>,
+    pub text: &'a str,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    pub color: Color,
+
+    pub pos: glam::Vec3,
+    pub rotation: glam::Quat,
+    pub scale: glam::Vec3,
+}
+
+impl<'a> Default for Text3dBufferDescriptor<'a> {
+    fn default() -> Self {
+        Self {
+            metrics: Metrics::relative(30., 1.2),
+            word_wrap: Wrap::WordOrGlyph,
+            attributes: Attrs::new(),
+            text: "",
+            width: Some(800.),
+            height: None,
+            color: Color::rgb(0, 0, 0),
+
+            pos: glam::Vec3::ZERO,
+            rotation: glam::Quat::IDENTITY,
+            scale: glam::Vec3::ONE,
+        }
+    }
+}
+
 #[derive(Component)]
 pub struct Text3dBuffer {
     vertex_buffer: wgpu::Buffer,
@@ -203,7 +243,11 @@ pub struct Text3dBuffer {
 }
 
 impl Text3dBuffer {
-    pub fn new(device: &wgpu::Device, text3d_renderer: &mut Text3dRenderer) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        text3d_renderer: &mut Text3dRenderer,
+        desc: &Text3dBufferDescriptor,
+    ) -> Self {
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Text 3d Vertex Buffer"),
             size: 0,
@@ -213,12 +257,9 @@ impl Text3dBuffer {
 
         let vertex_count = 0;
 
-        let transform = glam::Mat4::from_scale_rotation_translation(
-            glam::Vec3::ONE,
-            glam::Quat::IDENTITY,
-            glam::Vec3::new(0., 0., 20.),
-        )
-        .to_cols_array();
+        let transform =
+            glam::Mat4::from_scale_rotation_translation(desc.scale, desc.rotation, desc.pos)
+                .to_cols_array();
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Text 3d Uniform Buffer"),
@@ -235,19 +276,19 @@ impl Text3dBuffer {
             }],
         });
 
-        let mut text_buffer = Buffer::new(
-            &mut text3d_renderer.font_system,
-            Metrics::relative(25., 1.2),
-        );
+        let mut text_buffer = Buffer::new(&mut text3d_renderer.font_system, desc.metrics);
 
         text_buffer.set_text(
             &mut text3d_renderer.font_system,
-            "Hello World!",
-            Attrs::new(),
+            desc.text,
+            desc.attributes,
             Shaping::Advanced,
         );
 
-        let color = Color::rgb(255, 255, 255);
+        text_buffer.set_size(&mut text3d_renderer.font_system, desc.width, desc.height);
+        text_buffer.set_wrap(&mut text3d_renderer.font_system, desc.word_wrap);
+
+        text_buffer.shape_until_scroll(&mut text3d_renderer.font_system, false);
 
         Self {
             vertex_buffer,
@@ -257,7 +298,7 @@ impl Text3dBuffer {
             uniform_bind_group,
 
             text_buffer,
-            color,
+            color: desc.color,
         }
     }
 }

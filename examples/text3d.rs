@@ -10,7 +10,7 @@ use cabat::{
 };
 use cabat_common::{WindowResizeEvent, WindowSize};
 use cabat_renderer::{
-    text::{Text3dBuffer, Text3dRenderer},
+    text::{Text3dBuffer, Text3dBufferDescriptor, Text3dRenderer},
     Device, Queue, RenderPass, SurfaceConfig,
 };
 use cabat_shipyard::prelude::*;
@@ -23,6 +23,7 @@ use shipyard::{
 fn main() {
     env_logger::Builder::new()
         .filter_module("cabat", log::LevelFilter::Trace)
+        .format_timestamp(None)
         .init();
 
     Runner::run(|builder| builder.add_plugin(DefaultPlugins).add_plugin(Text3dPlugin));
@@ -95,7 +96,17 @@ fn sys_setup_entities(
             Translation {
                 pos: glam::Vec3::ZERO,
             },
-            Text3dBuffer::new(device.inner(), &mut renderer),
+            Text3dBuffer::new(
+                device.inner(),
+                &mut renderer,
+                &Text3dBufferDescriptor {
+                    text: "Hello World! 12345 ABCDE",
+                    // text: "A\nB",
+                    // width: todo!(),
+                    pos: glam::vec3(0., 0., 20.),
+                    ..Default::default()
+                },
+            ),
         ),
     );
 }
