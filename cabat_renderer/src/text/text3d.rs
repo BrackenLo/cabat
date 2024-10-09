@@ -2,7 +2,7 @@
 
 use std::hash::{Hash, Hasher};
 
-use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache, Wrap};
+use cosmic_text::{Attrs, Buffer, CacheKey, Color, FontSystem, Metrics, Shaping, SwashCache, Wrap};
 use rustc_hash::FxHasher;
 use shipyard::{Component, Unique};
 use wgpu::util::DeviceExt;
@@ -43,6 +43,17 @@ impl Vertex for Text3dVertex {
 
 //====================================================================
 
+struct LocalGlyphData {
+    x: f32,
+    y: f32,
+    key: CacheKey,
+    color: u32,
+}
+
+//--------------------------------------------------
+
+// TODO - Try to move font system, swash cache and atlas out of renderer
+//      - as can be used in other pipeline contexts
 #[derive(Unique)]
 pub struct Text3dRenderer {
     font_system: FontSystem,
@@ -108,71 +119,147 @@ impl Text3dRenderer {
         }
     }
 
-    pub fn prep<'a, B>(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, buffers: B)
+    pub fn prep<'a, Buf>(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, buffers: Buf)
     where
-        B: IntoIterator<Item = &'a mut Text3dBuffer>,
+        Buf: IntoIterator<Item = &'a mut Text3dBuffer>,
     {
         buffers.into_iter().for_each(|text3d_buffer| {
-            text3d_buffer.text_buffer.layout_runs().for_each(|run| {
-                let mut hasher = FxHasher::default();
+            let mut rebuild_all_lines = false;
+            // let mut rebuild_start_index = 0;
 
-                let cache_keys = run
-                    .glyphs
-                    .iter()
-                    .filter_map(|glyph| {
-                        let physical = glyph.physical((0., 0.), 1.);
+            let local_glyph_data = text3d_buffer
+                .text_buffer
+                .layout_runs()
+                .enumerate()
+                .flat_map(|(index, layout_run)| {
+                    // Hasher for determining if a line has changed
+                    let mut hasher = FxHasher::default();
 
-                        self.atlas
-                            .use_glyph(
+                    let mut line_length = 0;
+
+                    //--------------------------------------------------
+
+                    // Iterate through each glyph in the line - prep and check
+                    let local_glyph_data = layout_run
+                        .glyphs
+                        .iter()
+                        .map(|glyph| {
+                            let physical = glyph.physical((0., 0.), 1.);
+
+                            // Try to prep glyph in atlas
+                            if let Err(_) = self.atlas.use_glyph(
                                 device,
                                 queue,
                                 &mut self.font_system,
                                 &mut self.swash_cache,
                                 &physical.cache_key,
-                            )
-                            .ok()?;
+                            ) {
+                                todo!()
+                                // panic!("TODO")
+                                // return;
+                            }
 
-                        physical.cache_key.hash(&mut hasher);
-                        text3d_buffer.color.hash(&mut hasher);
+                            // Check if glyph has specific color to use
+                            let color = match glyph.color_opt {
+                                Some(color) => color,
+                                None => text3d_buffer.color,
+                            };
 
-                        Some((physical.cache_key, physical.x, physical.y))
-                    })
-                    .collect::<Vec<_>>();
+                            // Hash results to check changes
+                            physical.cache_key.hash(&mut hasher);
+                            color.hash(&mut hasher);
 
-                let vertex_hash = hasher.finish();
+                            // Count number of glyphs in line
+                            line_length += 1;
 
-                if vertex_hash != text3d_buffer.vertex_hash {
-                    println!("Updating text vertives {}", vertex_hash);
-                    text3d_buffer.vertex_hash = vertex_hash;
-
-                    let glyph_vertices = cache_keys
-                        .into_iter()
-                        .map(|(key, x, y)| {
-                            let data = self.atlas.get_glyph_data(&key).unwrap();
-
-                            let x = x as f32 + data.left + data.width / 2.;
-                            let y = y as f32 + data.top + run.line_y;
-
-                            Text3dVertex {
-                                glyph_pos: [x, y],
-                                glyph_size: [data.width, data.height],
-                                uv_start: data.uv_start,
-                                uv_end: data.uv_end,
-                                color: text3d_buffer.color.0,
+                            // Data for rebuilding later
+                            LocalGlyphData {
+                                x: physical.x as f32,
+                                y: physical.y as f32 - layout_run.line_y,
+                                key: physical.cache_key,
+                                color: color.0,
                             }
                         })
                         .collect::<Vec<_>>();
 
-                    render_tools::update_instance_buffer(
-                        device,
-                        queue,
-                        "Text3d Vertex Buffer",
-                        &mut text3d_buffer.vertex_buffer,
-                        &mut text3d_buffer.vertex_count,
-                        &glyph_vertices,
-                    );
-                }
-            });
+                    //--------------------------------------------------
+
+                    let line_hash = hasher.finish();
+
+                    if text3d_buffer.lines.len() <= index {
+                        text3d_buffer.lines.push(Text3dBufferLine::default());
+                    }
+
+                    let line_entry = &mut text3d_buffer.lines[index];
+
+                    if line_hash != line_entry.hash {
+                        println!("Line '{}' hash updated '{}'", index, line_hash);
+
+                        line_entry.hash = line_hash;
+                        line_entry.length = line_length;
+
+                        rebuild_all_lines = true;
+                    }
+
+                    local_glyph_data
+
+                    //--------------------------------------------------
+
+                    // OPTIMIZE - The Real optimisations start here
+                    // if rebuild_all_lines {
+                    //     // Update and return
+                    //     return;
+                    // }
+
+                    // let rebuild = match text3d_buffer.lines.get(index) {
+                    //     Some(_) => todo!(),
+                    //     None => true,
+                    // };
+
+                    // match (rebuild_all_lines, text3d_buffer.lines.get(index)) {
+                    //     // Create entry and populate
+                    //     (true, None) => todo!(),
+
+                    //     // Update entry
+                    //     (true, Some(_)) => todo!(),
+
+                    //     // Create entry and populate and mark rebuild all lines with rebuild start index
+                    //     (false, None) => todo!(),
+
+                    //     // match entry with line hash. rebuild if required. if line length changed, mark rebuild all lines with rebuild start index
+                    //     (false, Some(_)) => todo!(),
+                    // };
+                })
+                .collect::<Vec<_>>();
+
+            if rebuild_all_lines {
+                let glyph_vertices = local_glyph_data
+                    .into_iter()
+                    .map(|local_data| {
+                        let data = self.atlas.get_glyph_data(&local_data.key).unwrap();
+
+                        let x = local_data.x + data.left + data.width / 2.;
+                        let y = local_data.y + data.top; // TODO - Run Line
+
+                        Text3dVertex {
+                            glyph_pos: [x, y],
+                            glyph_size: [data.width, data.height],
+                            uv_start: data.uv_start,
+                            uv_end: data.uv_end,
+                            color: local_data.color,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                render_tools::update_instance_buffer(
+                    device,
+                    queue,
+                    "Text3d Vertex Buffer",
+                    &mut text3d_buffer.vertex_buffer,
+                    &mut text3d_buffer.vertex_count,
+                    &glyph_vertices,
+                );
+            }
         });
     }
 
@@ -230,11 +317,19 @@ impl<'a> Default for Text3dBufferDescriptor<'a> {
     }
 }
 
+#[derive(Default)]
+struct Text3dBufferLine {
+    hash: u64,
+    length: usize,
+}
+
 #[derive(Component)]
 pub struct Text3dBuffer {
     vertex_buffer: wgpu::Buffer,
     vertex_count: u32,
-    vertex_hash: u64,
+    lines: Vec<Text3dBufferLine>,
+
+    // 3d Transform
     uniform_buffer: wgpu::Buffer,
     uniform_bind_group: wgpu::BindGroup,
 
@@ -256,6 +351,7 @@ impl Text3dBuffer {
         });
 
         let vertex_count = 0;
+        let lines = Vec::new();
 
         let transform =
             glam::Mat4::from_scale_rotation_translation(desc.scale, desc.rotation, desc.pos)
@@ -293,7 +389,8 @@ impl Text3dBuffer {
         Self {
             vertex_buffer,
             vertex_count,
-            vertex_hash: 0,
+            lines,
+
             uniform_buffer,
             uniform_bind_group,
 

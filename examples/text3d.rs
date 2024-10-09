@@ -39,7 +39,7 @@ struct MainCamera {
 
 #[derive(Component)]
 struct Translation {
-    pos: glam::Vec3,
+    _pos: glam::Vec3,
 }
 
 //====================================================================
@@ -91,13 +91,13 @@ fn sys_setup_entities(
         (&mut vm_pos, &mut vm_text_buffers),
         (
             Translation {
-                pos: glam::Vec3::ZERO,
+                _pos: glam::Vec3::ZERO,
             },
             Text3dBuffer::new(
                 device.inner(),
                 &mut renderer,
                 &Text3dBufferDescriptor {
-                    text: "Hello World! 12345 ABCDE",
+                    text: "Hello World! 12345 \nABCDE",
                     // text: "A\nB",
                     // width: todo!(),
                     pos: glam::vec3(0., 0., 20.),

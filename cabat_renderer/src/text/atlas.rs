@@ -112,6 +112,7 @@ impl TextAtlas {
 //--------------------------------------------------
 
 impl TextAtlas {
+    // TODO - Replace Result<GlyphData, ()> with Result<(), Err>
     // Cache glyph if not already and then promote in LRU
     pub fn use_glyph(
         &mut self,
