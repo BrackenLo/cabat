@@ -33,12 +33,11 @@ impl Plugin for Text2dPlugin {
             .add_workload_last(Stages::Update, (sys_prep_text).into_workload())
             .add_workload_post(
                 Stages::Render,
-                (sys_render
+                sys_render
                     .skip_if_missing_unique::<RenderEncoder>()
-                    .after_all(crate::sys_finish_main_render_pass))
-                .into_workload(),
+                    .after_all(crate::sys_finish_main_render_pass),
             )
-            .add_workload(Stages::Last, (sys_trim_text_pipeline).into_workload())
+            .add_workload(Stages::Last, sys_trim_text_pipeline)
             .add_event::<WindowResizeEvent>((sys_resize_text_pipeline).into_workload())
     }
 }

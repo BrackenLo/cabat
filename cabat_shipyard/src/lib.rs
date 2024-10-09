@@ -5,7 +5,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use shipyard::{info::TypeId, Unique, WorkloadModificator, World};
+use shipyard::{info::TypeId, IntoWorkload, Unique, WorkloadModificator, World};
 
 //====================================================================
 
@@ -176,30 +176,49 @@ impl<'a> WorkloadBuilder<'a> {
         self
     }
 
-    #[inline]
-    pub fn add_workload_first(self, stage: Stages, workload: shipyard::Workload) -> Self {
-        self.add_workload_sub(stage, SubStages::First, workload)
+    //--------------------------------------------------
+
+    pub fn add_workload_first<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::First, workload.into_workload())
     }
 
-    #[inline]
-    pub fn add_workload_pre(self, stage: Stages, workload: shipyard::Workload) -> Self {
-        self.add_workload_sub(stage, SubStages::Pre, workload)
+    pub fn add_workload_pre<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::Pre, workload.into_workload())
     }
 
-    #[inline]
-    pub fn add_workload(self, stage: Stages, workload: shipyard::Workload) -> Self {
-        self.add_workload_sub(stage, SubStages::Main, workload)
+    pub fn add_workload<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::Main, workload.into_workload())
     }
 
-    #[inline]
-    pub fn add_workload_post(self, stage: Stages, workload: shipyard::Workload) -> Self {
-        self.add_workload_sub(stage, SubStages::Post, workload)
+    pub fn add_workload_post<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::Post, workload.into_workload())
     }
 
-    #[inline]
-    pub fn add_workload_last(self, stage: Stages, workload: shipyard::Workload) -> Self {
-        self.add_workload_sub(stage, SubStages::Last, workload)
+    pub fn add_workload_last<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::Last, workload.into_workload())
     }
+
+    //--------------------------------------------------
 
     pub fn add_event<E: Event>(mut self, workload: shipyard::Workload) -> Self {
         let id = TypeId::of::<E>();

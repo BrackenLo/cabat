@@ -52,12 +52,9 @@ impl Plugin for Text3dPlugin {
                 Stages::Setup,
                 (sys_setup_renderer, sys_setup_entities).into_sequential_workload(),
             )
-            .add_workload(
-                Stages::Update,
-                (sys_update_camera, sys_move_camera).into_workload(),
-            )
-            .add_workload_post(Stages::Update, (sys_update_text).into_workload())
-            .add_workload(Stages::Render, (sys_render).into_workload())
+            .add_workload(Stages::Update, (sys_update_camera, sys_move_camera))
+            .add_workload_post(Stages::Update, sys_update_text)
+            .add_workload(Stages::Render, sys_render)
             .add_event::<WindowResizeEvent>((sys_resize_camera).into_workload())
     }
 }

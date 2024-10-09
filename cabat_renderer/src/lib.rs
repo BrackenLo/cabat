@@ -56,10 +56,7 @@ impl Plugin for CoreRendererPlugin {
                 Stages::Render,
                 (sys_setup_encoder, sys_setup_render_pass).into_sequential_workload(),
             )
-            .add_workload_post(
-                Stages::Render,
-                (sys_finish_main_render_pass).into_workload(),
-            )
+            .add_workload_post(Stages::Render, sys_finish_main_render_pass)
             .add_workload_last(
                 Stages::Render,
                 (sys_submit_encoder).into_workload().tag("submit_encoder"),
