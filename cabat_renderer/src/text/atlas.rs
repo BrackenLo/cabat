@@ -17,6 +17,7 @@ use crate::{render_tools, texture::Texture};
 pub enum CacheGlyphError {
     NoGlyphImage,
     OutOfSpace,
+    LruStorageError,
 }
 
 impl Error for CacheGlyphError {}
@@ -25,7 +26,12 @@ impl Display for CacheGlyphError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match &self {
             CacheGlyphError::NoGlyphImage => "Unable to get image from proved glyph.",
-            CacheGlyphError::OutOfSpace => "Atlas texture is not big enough to store new glyphs",
+            CacheGlyphError::OutOfSpace => {
+                "Atlas texture is not big enough to store new glyphs - TODO"
+            }
+            CacheGlyphError::LruStorageError => {
+                "Error accessing glyphs from LRU - This shouldn't really happen."
+            }
         };
 
         write!(f, "{}", msg)
@@ -139,15 +145,9 @@ impl TextAtlas {
         }
         // Try to cache glyph
         else {
-            let image = match swash_cache.get_image_uncached(font_system, *key) {
-                Some(img) => img,
-
-                // No glyph available??
-                None => {
-                    // TODO
-                    return Err(CacheGlyphError::NoGlyphImage);
-                }
-            };
+            let image = swash_cache
+                .get_image_uncached(font_system, *key)
+                .ok_or(CacheGlyphError::NoGlyphImage)?;
 
             self.cache_glyph(device, queue, key, &image)?;
 
@@ -204,13 +204,13 @@ impl TextAtlas {
         let width = image.placement.width as f32;
         let height = image.placement.height as f32;
 
-        log::trace!(
-            "Allocated glyph id {:?}, with size {:?} and uv ({:?}, {:?})",
-            &key.glyph_id,
-            size,
-            uv_start,
-            uv_end
-        );
+        // log::trace!(
+        //     "Allocated glyph id {:?}, with size {:?} and uv ({:?}, {:?})",
+        //     &key.glyph_id,
+        //     size,
+        //     uv_start,
+        //     uv_end
+        // );
 
         let glyph_data = GlyphData {
             alloc_id: allocation.id,
@@ -230,17 +230,15 @@ impl TextAtlas {
     fn free_space(&mut self, _device: &wgpu::Device) -> Result<(), CacheGlyphError> {
         //
         match self.cached_glyphs.peek_lru() {
+            // Check if last used key is in use. If so, grow atlas
             Some((key, _)) => {
                 if self.glyphs_in_use.contains(key) {
                     // TODO - Try to grow glyph cache - Make sure to re-set all glyph data UVs
-                    // todo!("Growing texture atlas not implemented yet")
                     return Err(CacheGlyphError::OutOfSpace);
                 }
             }
-            None => {
-                // Issues with size of lru
-                todo!()
-            }
+            // Issues with size of lru
+            None => return Err(CacheGlyphError::LruStorageError),
         };
 
         let (key, val) = self.cached_glyphs.pop_lru().unwrap();

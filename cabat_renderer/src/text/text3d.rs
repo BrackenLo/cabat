@@ -52,8 +52,6 @@ struct LocalGlyphData {
 
 //--------------------------------------------------
 
-// TODO - Try to move font system, swash cache and atlas out of renderer
-//      - as can be used in other pipeline contexts
 #[derive(Unique)]
 pub struct Text3dRenderer {
     pipeline: wgpu::RenderPipeline,
