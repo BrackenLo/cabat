@@ -56,10 +56,6 @@ struct LocalGlyphData {
 //      - as can be used in other pipeline contexts
 #[derive(Unique)]
 pub struct Text3dRenderer {
-    font_system: FontSystem,
-    swash_cache: SwashCache,
-    atlas: TextAtlas,
-
     pipeline: wgpu::RenderPipeline,
     buffer_bind_group_layout: wgpu::BindGroupLayout,
 }
@@ -68,12 +64,9 @@ impl Text3dRenderer {
     pub fn new(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
+        atlas: &TextAtlas,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
-        let font_system = FontSystem::new();
-        let swash_cache = SwashCache::new();
-        let atlas = TextAtlas::new(device);
-
         let buffer_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Text 3d Renderer Buffer Bind Group Layout"),
@@ -111,16 +104,20 @@ impl Text3dRenderer {
         );
 
         Self {
-            font_system,
-            swash_cache,
-            atlas,
             pipeline,
             buffer_bind_group_layout,
         }
     }
 
-    pub fn prep<'a, Buf>(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, buffers: Buf)
-    where
+    pub fn prep<'a, Buf>(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        font_system: &mut FontSystem,
+        swash_cache: &mut SwashCache,
+        atlas: &mut TextAtlas,
+        buffers: Buf,
+    ) where
         Buf: IntoIterator<Item = &'a mut Text3dBuffer>,
     {
         buffers.into_iter().for_each(|text3d_buffer| {
@@ -147,11 +144,11 @@ impl Text3dRenderer {
                             let physical = glyph.physical((0., 0.), 1.);
 
                             // Try to prep glyph in atlas
-                            if let Err(_) = self.atlas.use_glyph(
+                            if let Err(_) = atlas.use_glyph(
                                 device,
                                 queue,
-                                &mut self.font_system,
-                                &mut self.swash_cache,
+                                font_system,
+                                swash_cache,
                                 &physical.cache_key,
                             ) {
                                 todo!()
@@ -236,7 +233,7 @@ impl Text3dRenderer {
                 let glyph_vertices = local_glyph_data
                     .into_iter()
                     .map(|local_data| {
-                        let data = self.atlas.get_glyph_data(&local_data.key).unwrap();
+                        let data = atlas.get_glyph_data(&local_data.key).unwrap();
 
                         let x = local_data.x + data.left + data.width / 2.;
                         let y = local_data.y + data.top; // TODO - Run Line
@@ -266,6 +263,7 @@ impl Text3dRenderer {
     pub fn render<'a, B>(
         &self,
         pass: &mut wgpu::RenderPass,
+        atlas: &TextAtlas,
         camera_bind_group: &wgpu::BindGroup,
         buffers: B,
     ) where
@@ -273,7 +271,7 @@ impl Text3dRenderer {
     {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, camera_bind_group, &[]);
-        pass.set_bind_group(1, self.atlas.bind_group(), &[]);
+        pass.set_bind_group(1, atlas.bind_group(), &[]);
 
         buffers.into_iter().for_each(|buffer| {
             pass.set_vertex_buffer(0, buffer.vertex_buffer.slice(..));
@@ -341,6 +339,7 @@ impl Text3dBuffer {
     pub fn new(
         device: &wgpu::Device,
         text3d_renderer: &mut Text3dRenderer,
+        font_system: &mut FontSystem,
         desc: &Text3dBufferDescriptor,
     ) -> Self {
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -372,19 +371,12 @@ impl Text3dBuffer {
             }],
         });
 
-        let mut text_buffer = Buffer::new(&mut text3d_renderer.font_system, desc.metrics);
+        let mut text_buffer = Buffer::new(font_system, desc.metrics);
 
-        text_buffer.set_text(
-            &mut text3d_renderer.font_system,
-            desc.text,
-            desc.attributes,
-            Shaping::Advanced,
-        );
+        text_buffer.set_size(font_system, desc.width, desc.height);
+        text_buffer.set_wrap(font_system, desc.word_wrap);
 
-        text_buffer.set_size(&mut text3d_renderer.font_system, desc.width, desc.height);
-        text_buffer.set_wrap(&mut text3d_renderer.font_system, desc.word_wrap);
-
-        text_buffer.shape_until_scroll(&mut text3d_renderer.font_system, false);
+        text_buffer.set_text(font_system, desc.text, desc.attributes, Shaping::Advanced);
 
         Self {
             vertex_buffer,

@@ -3,8 +3,8 @@
 use cabat_common::{WindowResizeEvent, WindowSize};
 use cabat_shipyard::prelude::*;
 use glyphon::{
-    Attrs, Buffer, Cache, FontSystem, Resolution, Shaping, SwashCache, TextArea, TextAtlas,
-    TextBounds, TextRenderer, Viewport, Wrap,
+    Attrs, Buffer, Cache, Resolution, Shaping, TextArea, TextAtlas, TextBounds, TextRenderer,
+    Viewport, Wrap,
 };
 use shipyard::{
     AllStoragesView, Component, IntoIter, IntoWorkload, SystemModificator, Unique, View,
@@ -17,6 +17,8 @@ use crate::{Device, Queue, RenderEncoder, RenderPassDesc, SurfaceConfig};
 
 pub use glyphon::{Color, Metrics};
 
+use super::{sys_setup_text_components, TextFontSystem, TextSwashCache};
+
 //====================================================================
 
 pub struct Text2dPlugin;
@@ -26,7 +28,7 @@ impl Plugin for Text2dPlugin {
         workload_builder
             .add_workload_first(
                 Stages::Setup,
-                (sys_setup_text_pipeline)
+                (sys_setup_text_components, sys_setup_text_pipeline)
                     .into_workload()
                     .after_all("renderer_setup"),
             )
@@ -47,8 +49,6 @@ impl Plugin for Text2dPlugin {
 #[derive(Unique)]
 pub struct TextPipeline {
     renderer: TextRenderer,
-    font_system: FontSystem,
-    swash_cache: SwashCache,
     atlas: TextAtlas,
     viewport: Viewport,
 }
@@ -60,8 +60,6 @@ impl TextPipeline {
         config: &wgpu::SurfaceConfiguration,
     ) -> Self {
         let cache = Cache::new(device);
-        let font_system = FontSystem::new();
-        let swash_cache = SwashCache::new();
         let mut atlas = TextAtlas::new(device, queue, &cache, config.format);
         let viewport = Viewport::new(device, &cache);
 
@@ -70,8 +68,6 @@ impl TextPipeline {
 
         Self {
             renderer,
-            font_system,
-            swash_cache,
             atlas,
             viewport,
         }
@@ -85,16 +81,19 @@ impl TextPipeline {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        font_system: &mut cosmic_text::FontSystem,
+        swash_cache: &mut cosmic_text::SwashCache,
+
         data: Vec<TextArea>,
     ) -> Result<(), glyphon::PrepareError> {
         self.renderer.prepare(
             device,
             queue,
-            &mut self.font_system,
+            font_system,
             &mut self.atlas,
             &self.viewport,
             data,
-            &mut self.swash_cache,
+            swash_cache,
         )
     }
 
@@ -133,6 +132,8 @@ fn sys_prep_text(
     queue: Res<Queue>,
 
     mut text_pipeline: ResMut<TextPipeline>,
+    mut font_system: ResMut<TextFontSystem>,
+    mut swash_cache: ResMut<TextSwashCache>,
     v_buffers: View<Text2dBuffer>,
 ) {
     let data = v_buffers
@@ -149,7 +150,13 @@ fn sys_prep_text(
         .collect::<Vec<_>>();
 
     text_pipeline
-        .prep(device.inner(), queue.inner(), data)
+        .prep(
+            device.inner(),
+            queue.inner(),
+            font_system.inner_mut(),
+            swash_cache.inner_mut(),
+            data,
+        )
         .unwrap();
 }
 
@@ -221,18 +228,13 @@ pub struct Text2dBuffer {
 }
 
 impl Text2dBuffer {
-    pub fn new(text_pipeline: &mut TextPipeline, desc: &Text2dBufferDescriptor) -> Self {
-        let mut buffer = Buffer::new(&mut text_pipeline.font_system, desc.metrics);
+    pub fn new(font_system: &mut cosmic_text::FontSystem, desc: &Text2dBufferDescriptor) -> Self {
+        let mut buffer = Buffer::new(font_system, desc.metrics);
 
-        buffer.set_text(
-            &mut text_pipeline.font_system,
-            desc.text,
-            Attrs::new(),
-            Shaping::Advanced,
-        );
+        buffer.set_text(font_system, desc.text, Attrs::new(), Shaping::Advanced);
 
-        buffer.set_wrap(&mut text_pipeline.font_system, desc.word_wrap);
-        buffer.set_size(&mut text_pipeline.font_system, desc.width, desc.height);
+        buffer.set_wrap(font_system, desc.word_wrap);
+        buffer.set_size(font_system, desc.width, desc.height);
 
         Self {
             buffer,
@@ -248,36 +250,31 @@ impl Text2dBuffer {
     }
 
     #[inline]
-    pub fn set_text(&mut self, text_pipeline: &mut TextPipeline, text: &str) {
-        self.buffer.set_text(
-            &mut text_pipeline.font_system,
-            text,
-            Attrs::new(),
-            Shaping::Advanced,
-        );
+    pub fn set_text(&mut self, font_system: &mut cosmic_text::FontSystem, text: &str) {
+        self.buffer
+            .set_text(font_system, text, Attrs::new(), Shaping::Advanced);
     }
 
     #[inline]
     pub fn set_size(
         &mut self,
-        text_pipeline: &mut TextPipeline,
+        font_system: &mut cosmic_text::FontSystem,
         width: Option<f32>,
         height: Option<f32>,
     ) {
-        self.buffer
-            .set_size(&mut text_pipeline.font_system, width, height);
+        self.buffer.set_size(font_system, width, height);
     }
 
     #[inline]
     pub fn set_metrics_and_size(
         &mut self,
-        text_pipeline: &mut TextPipeline,
+        font_system: &mut cosmic_text::FontSystem,
         metrics: Metrics,
         width: Option<f32>,
         height: Option<f32>,
     ) {
         self.buffer
-            .set_metrics_and_size(&mut text_pipeline.font_system, metrics, width, height);
+            .set_metrics_and_size(font_system, metrics, width, height);
     }
 }
 

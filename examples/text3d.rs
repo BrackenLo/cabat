@@ -10,7 +10,10 @@ use cabat::{
 };
 use cabat_common::{WindowResizeEvent, WindowSize};
 use cabat_renderer::{
-    text::{Text3dBuffer, Text3dBufferDescriptor, Text3dRenderer},
+    text::{
+        Text3dBuffer, Text3dBufferDescriptor, Text3dRenderer, TextAtlas, TextFontSystem,
+        TextSwashCache,
+    },
     Device, Queue, RenderPass, SurfaceConfig,
 };
 use cabat_shipyard::prelude::*;
@@ -45,6 +48,7 @@ struct Translation {
 //====================================================================
 
 pub struct Text3dPlugin;
+
 impl Plugin for Text3dPlugin {
     fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
         workload_builder
@@ -63,6 +67,7 @@ fn sys_setup_renderer(
     all_storages: AllStoragesView,
     device: Res<Device>,
     config: Res<SurfaceConfig>,
+    atlas: Res<TextAtlas>,
 ) {
     let raw = PerspectiveCamera::default();
     let camera = MainCamera {
@@ -73,6 +78,7 @@ fn sys_setup_renderer(
     let renderer = Text3dRenderer::new(
         device.inner(),
         config.inner(),
+        &atlas,
         camera.camera.bind_group_layout(),
     );
     all_storages.add_unique(renderer);
@@ -83,6 +89,7 @@ fn sys_setup_entities(
     mut entities: EntitiesViewMut,
     device: Res<Device>,
     mut renderer: ResMut<Text3dRenderer>,
+    mut font_system: ResMut<TextFontSystem>,
 
     mut vm_pos: ViewMut<Translation>,
     mut vm_text_buffers: ViewMut<Text3dBuffer>,
@@ -96,6 +103,7 @@ fn sys_setup_entities(
             Text3dBuffer::new(
                 device.inner(),
                 &mut renderer,
+                font_system.inner_mut(),
                 &Text3dBufferDescriptor {
                     text: "Hello World! 12345 \nABCDE",
                     // text: "A\nB",
@@ -113,21 +121,33 @@ fn sys_update_text(
     queue: Res<Queue>,
 
     mut renderer: ResMut<Text3dRenderer>,
+    mut font_system: ResMut<TextFontSystem>,
+    mut swash_cache: ResMut<TextSwashCache>,
+    mut text_atlas: ResMut<TextAtlas>,
     // v_pos: View<Translation>,
     mut vm_text_buffers: ViewMut<Text3dBuffer>,
 ) {
-    renderer.prep(device.inner(), queue.inner(), (&mut vm_text_buffers).iter());
+    renderer.prep(
+        device.inner(),
+        queue.inner(),
+        font_system.inner_mut(),
+        swash_cache.inner_mut(),
+        &mut text_atlas,
+        (&mut vm_text_buffers).iter(),
+    );
 }
 
 fn sys_render(
     mut render_pass: ResMut<RenderPass>,
     renderer: Res<Text3dRenderer>,
+    text_atlas: Res<TextAtlas>,
     v_text_buffers: View<Text3dBuffer>,
 
     camera: Res<MainCamera>,
 ) {
     renderer.render(
         render_pass.pass(),
+        &text_atlas,
         camera.camera.bind_group(),
         v_text_buffers.iter(),
     );

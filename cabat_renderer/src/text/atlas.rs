@@ -3,30 +3,38 @@
 use std::{collections::HashSet, error::Error, fmt::Display, hash::BuildHasherDefault};
 
 use cabat_common::Size;
-use cosmic_text::{CacheKey, FontSystem, SwashCache};
+use cosmic_text::{CacheKey, FontSystem, SwashCache, SwashImage};
 use etagere::{euclid::Size2D, AllocId, BucketedAtlasAllocator};
 use lru::LruCache;
 use rustc_hash::FxHasher;
+use shipyard::Unique;
 
 use crate::{render_tools, texture::Texture};
 
 //====================================================================
 
 #[derive(Debug)]
-pub struct CacheGlyphError;
+pub enum CacheGlyphError {
+    NoGlyphImage,
+    OutOfSpace,
+}
 
 impl Error for CacheGlyphError {}
 
 impl Display for CacheGlyphError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO
-        write!(f, "Failed to cache glyph")
+        let msg = match &self {
+            CacheGlyphError::NoGlyphImage => "Unable to get image from proved glyph.",
+            CacheGlyphError::OutOfSpace => "Atlas texture is not big enough to store new glyphs",
+        };
+
+        write!(f, "{}", msg)
     }
 }
 
 //====================================================================
 
-pub(super) struct GlyphData {
+pub struct GlyphData {
     alloc_id: AllocId,
     pub uv_start: [f32; 2],
     pub uv_end: [f32; 2],
@@ -38,6 +46,7 @@ pub(super) struct GlyphData {
 
 type Hasher = BuildHasherDefault<FxHasher>;
 
+#[derive(Unique)]
 pub struct TextAtlas {
     packer: BucketedAtlasAllocator,
 
@@ -112,7 +121,6 @@ impl TextAtlas {
 //--------------------------------------------------
 
 impl TextAtlas {
-    // TODO - Replace Result<GlyphData, ()> with Result<(), Err>
     // Cache glyph if not already and then promote in LRU
     pub fn use_glyph(
         &mut self,
@@ -121,14 +129,13 @@ impl TextAtlas {
         font_system: &mut FontSystem,
         swash_cache: &mut SwashCache,
         key: &CacheKey,
-    ) -> Result<&GlyphData, ()> {
+    ) -> Result<(), CacheGlyphError> {
         // Already has glyph cached
         if self.cached_glyphs.contains(key) {
             self.cached_glyphs.promote(key);
             self.glyphs_in_use.insert(*key);
 
-            let data = self.cached_glyphs.get(&key).unwrap();
-            Ok(data)
+            Ok(())
         }
         // Try to cache glyph
         else {
@@ -136,22 +143,17 @@ impl TextAtlas {
                 Some(img) => img,
 
                 // No glyph available??
-                None => todo!(),
+                None => {
+                    // TODO
+                    return Err(CacheGlyphError::NoGlyphImage);
+                }
             };
 
-            match self.cache_glypyh(device, queue, key, &image) {
-                // Successfully cached and uploaded glyph
-                Ok(_) => {
-                    self.cached_glyphs.promote(key);
-                    self.glyphs_in_use.insert(*key);
+            self.cache_glyph(device, queue, key, &image)?;
 
-                    let data = self.cached_glyphs.get(&key).unwrap();
-                    Ok(data)
-                }
-
-                // Failed to cache glyph - return error
-                Err(_) => todo!(),
-            }
+            self.cached_glyphs.promote(key);
+            self.glyphs_in_use.insert(*key);
+            Ok(())
         }
     }
 
@@ -160,12 +162,12 @@ impl TextAtlas {
         self.cached_glyphs.get(key)
     }
 
-    fn cache_glypyh(
+    fn cache_glyph(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         key: &CacheKey,
-        image: &cosmic_text::SwashImage,
+        image: &SwashImage,
     ) -> Result<(), CacheGlyphError> {
         let image_width = image.placement.width;
         let image_height = image.placement.height;
@@ -231,7 +233,8 @@ impl TextAtlas {
             Some((key, _)) => {
                 if self.glyphs_in_use.contains(key) {
                     // TODO - Try to grow glyph cache - Make sure to re-set all glyph data UVs
-                    todo!("Growing texture atlas not implemented yet")
+                    // todo!("Growing texture atlas not implemented yet")
+                    return Err(CacheGlyphError::OutOfSpace);
                 }
             }
             None => {
