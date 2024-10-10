@@ -1,6 +1,14 @@
 //====================================================================
 
+use shipyard::Unique;
 use wgpu::util::DeviceExt;
+
+//====================================================================
+
+#[derive(Unique)]
+pub struct MainCamera(pub Camera);
+
+// TODO - Create MainUiCamera (orthographic projection)
 
 //====================================================================
 

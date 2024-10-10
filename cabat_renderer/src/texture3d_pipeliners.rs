@@ -13,6 +13,11 @@ use crate::{
 
 //====================================================================
 
+// TODO - Create Texture3dPlugin - see Text3dPlugin
+//      - Also see about renaming into Texture3dRenderer
+
+//====================================================================
+
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
 pub struct Texture3dInstanceRaw {

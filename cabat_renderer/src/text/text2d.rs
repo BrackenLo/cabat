@@ -29,10 +29,10 @@ impl Plugin for Text2dPlugin {
             .add_workload_first(
                 Stages::Setup,
                 (sys_setup_text_components, sys_setup_text_pipeline)
-                    .into_workload()
+                    .into_sequential_workload()
                     .after_all("renderer_setup"),
             )
-            .add_workload_last(Stages::Update, (sys_prep_text).into_workload())
+            .add_workload_last(Stages::Update, sys_prep_text)
             .add_workload_post(
                 Stages::Render,
                 sys_render
@@ -46,6 +46,7 @@ impl Plugin for Text2dPlugin {
 
 //====================================================================
 
+// TODO - Replace glyphon with own custom cosmic_text implementation (more inline with text3d)
 #[derive(Unique)]
 pub struct TextPipeline {
     renderer: TextRenderer,

@@ -1,6 +1,9 @@
 //====================================================================
 
+use cabat_shipyard::Res;
 use shipyard::{AllStoragesView, Unique};
+
+use crate::Device;
 
 mod atlas;
 mod text2d;
@@ -8,7 +11,7 @@ mod text3d;
 
 pub use atlas::TextAtlas;
 pub use text2d::{Text2dBuffer, Text2dBufferDescriptor, Text2dPlugin, TextPipeline};
-pub use text3d::{Text3dBuffer, Text3dBufferDescriptor, Text3dRenderer};
+pub use text3d::{Text3dBuffer, Text3dBufferDescriptor, Text3dPlugin, Text3dRenderer};
 
 //====================================================================
 
@@ -38,9 +41,10 @@ impl TextSwashCache {
 
 //====================================================================
 
-fn sys_setup_text_components(all_storages: AllStoragesView) {
+fn sys_setup_text_components(all_storages: AllStoragesView, device: Res<Device>) {
     all_storages.add_unique(TextFontSystem(cosmic_text::FontSystem::new()));
     all_storages.add_unique(TextSwashCache(cosmic_text::SwashCache::new()));
+    all_storages.add_unique(TextAtlas::new(device.inner()));
 }
 
 //====================================================================

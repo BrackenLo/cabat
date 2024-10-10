@@ -248,6 +248,11 @@ impl TextAtlas {
 
         return Ok(());
     }
+
+    #[inline]
+    pub fn post_render_trim(&mut self) {
+        self.glyphs_in_use.clear();
+    }
 }
 
 //====================================================================

@@ -5,6 +5,7 @@ use shipyard::Component;
 //====================================================================
 
 #[derive(Component)]
+#[track(All)]
 pub struct Transform {
     pub translation: glam::Vec3,
     pub rotation: glam::Quat,

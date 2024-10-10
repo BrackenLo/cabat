@@ -340,6 +340,7 @@ impl<'a> WorkloadBuilder<'a> {
         self
     }
 
+    // TODO - Add tracking to make sure plugin can't be added multiple times
     pub fn add_plugin<T: Plugin>(mut self, plugin: T) -> Self {
         self.log(format!("Adding plugin '{}'", std::any::type_name::<T>()));
         self.build_tabs += 1;

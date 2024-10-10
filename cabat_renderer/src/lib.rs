@@ -16,7 +16,7 @@ pub mod texture3d_pipeliners;
 //====================================================================
 
 pub mod plugins {
-    pub use crate::{text::Text2dPlugin, CoreRendererPlugin};
+    pub use crate::{text::Text2dPlugin, text::Text3dPlugin, CoreRendererPlugin};
 }
 
 pub mod crates {
@@ -32,6 +32,7 @@ impl Plugin for FullRendererPlugin {
         builder
             .add_plugin(CoreRendererPlugin)
             .add_plugin(plugins::Text2dPlugin)
+            .add_plugin(plugins::Text3dPlugin)
     }
 }
 
@@ -207,8 +208,12 @@ fn sys_setup_renderer_components(all_storages: AllStoragesView, window: Res<Wind
         .insert(SurfaceConfig(config));
 }
 
-fn sys_setup_misc(all_storages: AllStoragesView) {
+fn sys_setup_misc(all_storages: AllStoragesView, device: Res<Device>) {
     all_storages.add_unique(ClearColor::default());
+    all_storages.add_unique(camera::MainCamera(camera::Camera::new(
+        device.inner(),
+        &camera::PerspectiveCamera::default(),
+    )))
 }
 
 //====================================================================

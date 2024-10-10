@@ -2,14 +2,112 @@
 
 use std::hash::{Hash, Hasher};
 
+use cabat_shipyard::prelude::*;
+use cabat_spatial::Transform;
 use cosmic_text::{Attrs, Buffer, CacheKey, Color, FontSystem, Metrics, Shaping, SwashCache, Wrap};
 use rustc_hash::FxHasher;
-use shipyard::{Component, Unique};
+use shipyard::{
+    track, AllStoragesView, Component, IntoIter, IntoWorkload, SystemModificator, Unique, View,
+    ViewMut, WorkloadModificator,
+};
 use wgpu::util::DeviceExt;
 
-use crate::{render_tools, Vertex};
+use crate::{camera::MainCamera, render_tools, Device, Queue, RenderPass, SurfaceConfig, Vertex};
 
-use super::atlas::TextAtlas;
+use super::{atlas::TextAtlas, sys_setup_text_components, TextFontSystem, TextSwashCache};
+
+//====================================================================
+
+pub struct Text3dPlugin;
+
+impl Plugin for Text3dPlugin {
+    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+        builder
+            .add_workload_first(
+                Stages::Setup,
+                (sys_setup_text_components, sys_setup_text_pipeline)
+                    .into_sequential_workload()
+                    .after_all("renderer_setup"),
+            )
+            .add_workload_last(Stages::Update, (sys_prep_text, sys_prep_text_transform))
+            .add_workload(
+                Stages::Render,
+                sys_render_text.skip_if_missing_unique::<RenderPass>(),
+            )
+            .add_workload(Stages::Last, sys_trim_atlas)
+    }
+}
+
+fn sys_setup_text_pipeline(
+    all_storages: AllStoragesView,
+    device: Res<Device>,
+    config: Res<SurfaceConfig>,
+    atlas: Res<TextAtlas>,
+    camera: Res<MainCamera>,
+) {
+    let pipeline = Text3dRenderer::new(
+        device.inner(),
+        config.inner(),
+        &atlas,
+        camera.0.bind_group_layout(),
+    );
+
+    all_storages.add_unique(pipeline);
+}
+
+fn sys_prep_text(
+    device: Res<Device>,
+    queue: Res<Queue>,
+
+    mut renderer: ResMut<Text3dRenderer>,
+    mut font_system: ResMut<TextFontSystem>,
+    mut swash_cache: ResMut<TextSwashCache>,
+    mut text_atlas: ResMut<TextAtlas>,
+
+    mut vm_text_buffer: ViewMut<Text3dBuffer>,
+) {
+    renderer.prep(
+        device.inner(),
+        queue.inner(),
+        font_system.inner_mut(),
+        swash_cache.inner_mut(),
+        &mut text_atlas,
+        (&mut vm_text_buffer).iter(),
+    )
+}
+
+fn sys_prep_text_transform(
+    queue: Res<Queue>,
+
+    v_text_buffer: View<Text3dBuffer>,
+    v_transform: View<Transform, track::All>,
+) {
+    (v_transform.inserted_or_modified(), &v_text_buffer)
+        .iter()
+        .for_each(|(transform, text_buffer)| {
+            text_buffer.update_transform(queue.inner(), transform);
+        });
+}
+
+fn sys_render_text(
+    mut render_pass: ResMut<RenderPass>,
+    renderer: Res<Text3dRenderer>,
+    text_atlas: Res<TextAtlas>,
+    v_text_buffers: View<Text3dBuffer>,
+
+    camera: Res<MainCamera>,
+) {
+    renderer.render(
+        render_pass.pass(),
+        &text_atlas,
+        camera.0.bind_group(),
+        v_text_buffers.iter(),
+    )
+}
+
+fn sys_trim_atlas(mut atlas: ResMut<TextAtlas>) {
+    atlas.post_render_trim();
+}
 
 //====================================================================
 
@@ -107,17 +205,15 @@ impl Text3dRenderer {
         }
     }
 
-    pub fn prep<'a, Buf>(
+    pub fn prep<'a>(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         font_system: &mut FontSystem,
         swash_cache: &mut SwashCache,
         atlas: &mut TextAtlas,
-        buffers: Buf,
-    ) where
-        Buf: IntoIterator<Item = &'a mut Text3dBuffer>,
-    {
+        buffers: impl IntoIterator<Item = &'a mut Text3dBuffer>,
+    ) {
         buffers.into_iter().for_each(|text3d_buffer| {
             let mut rebuild_all_lines = false;
             // let mut rebuild_start_index = 0;
@@ -188,7 +284,7 @@ impl Text3dRenderer {
                     let line_entry = &mut text3d_buffer.lines[index];
 
                     if line_hash != line_entry.hash {
-                        println!("Line '{}' hash updated '{}'", index, line_hash);
+                        log::trace!("Line '{}' hash updated '{}'", index, line_hash);
 
                         line_entry.hash = line_hash;
                         line_entry.length = line_length;
@@ -227,6 +323,7 @@ impl Text3dRenderer {
                 })
                 .collect::<Vec<_>>();
 
+            // TODO - OPTIMIZE - Only rebuild lines that need rebuilding
             if rebuild_all_lines {
                 let glyph_vertices = local_glyph_data
                     .into_iter()
@@ -387,6 +484,14 @@ impl Text3dBuffer {
             text_buffer,
             color: desc.color,
         }
+    }
+
+    pub fn update_transform(&self, queue: &wgpu::Queue, transform: &Transform) {
+        queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[transform.to_array()]),
+        );
     }
 }
 
