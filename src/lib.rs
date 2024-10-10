@@ -33,6 +33,10 @@ pub mod shipyard_tools {
     };
 }
 
+pub mod spatial {
+    pub use cabat_spatial::Transform;
+}
+
 //====================================================================
 
 pub struct DefaultPlugins;

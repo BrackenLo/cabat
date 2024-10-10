@@ -3,8 +3,8 @@
 use cabat_common::{WindowResizeEvent, WindowSize};
 use cabat_shipyard::prelude::*;
 use glyphon::{
-    Attrs, Buffer, Cache, Resolution, Shaping, TextArea, TextAtlas, TextBounds, TextRenderer,
-    Viewport, Wrap,
+    Attrs, Buffer, Cache, Color, Metrics, Resolution, Shaping, TextArea, TextAtlas, TextBounds,
+    TextRenderer, Viewport, Wrap,
 };
 use shipyard::{
     AllStoragesView, Component, IntoIter, IntoWorkload, SystemModificator, Unique, View,
@@ -12,10 +12,6 @@ use shipyard::{
 };
 
 use crate::{Device, Queue, RenderEncoder, RenderPassDesc, SurfaceConfig};
-
-//====================================================================
-
-pub use glyphon::{Color, Metrics};
 
 use super::{sys_setup_text_components, TextFontSystem, TextSwashCache};
 
@@ -48,13 +44,13 @@ impl Plugin for Text2dPlugin {
 
 // TODO - Replace glyphon with own custom cosmic_text implementation (more inline with text3d)
 #[derive(Unique)]
-pub struct TextPipeline {
+pub struct Text2dRenderer {
     renderer: TextRenderer,
     atlas: TextAtlas,
     viewport: Viewport,
 }
 
-impl TextPipeline {
+impl Text2dRenderer {
     fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -115,7 +111,7 @@ fn sys_setup_text_pipeline(
     queue: Res<Queue>,
     config: Res<SurfaceConfig>,
 ) {
-    let pipeline = TextPipeline::new(device.inner(), queue.inner(), config.inner());
+    let pipeline = Text2dRenderer::new(device.inner(), queue.inner(), config.inner());
     all_storages.add_unique(pipeline);
 }
 
@@ -123,7 +119,7 @@ fn sys_resize_text_pipeline(
     queue: Res<Queue>,
     size: Res<WindowSize>,
 
-    mut text_pipeline: ResMut<TextPipeline>,
+    mut text_pipeline: ResMut<Text2dRenderer>,
 ) {
     text_pipeline.resize(queue.inner(), size.width(), size.height());
 }
@@ -132,7 +128,7 @@ fn sys_prep_text(
     device: Res<Device>,
     queue: Res<Queue>,
 
-    mut text_pipeline: ResMut<TextPipeline>,
+    mut text_pipeline: ResMut<Text2dRenderer>,
     mut font_system: ResMut<TextFontSystem>,
     mut swash_cache: ResMut<TextSwashCache>,
     v_buffers: View<Text2dBuffer>,
@@ -161,12 +157,12 @@ fn sys_prep_text(
         .unwrap();
 }
 
-fn sys_render(mut tools: ResMut<RenderEncoder>, pipeline: Res<TextPipeline>) {
+fn sys_render(mut tools: ResMut<RenderEncoder>, pipeline: Res<Text2dRenderer>) {
     let mut pass = tools.begin_render_pass(RenderPassDesc::none());
     pipeline.render(&mut pass);
 }
 
-fn sys_trim_text_pipeline(mut text_pipeline: ResMut<TextPipeline>) {
+fn sys_trim_text_pipeline(mut text_pipeline: ResMut<Text2dRenderer>) {
     text_pipeline.trim();
 }
 

@@ -10,7 +10,8 @@ mod text2d;
 mod text3d;
 
 pub use atlas::TextAtlas;
-pub use text2d::{Text2dBuffer, Text2dBufferDescriptor, Text2dPlugin, TextPipeline};
+pub use cosmic_text::{Attrs, Color, Metrics};
+pub use text2d::{Text2dBuffer, Text2dBufferDescriptor, Text2dPlugin, Text2dRenderer};
 pub use text3d::{Text3dBuffer, Text3dBufferDescriptor, Text3dPlugin, Text3dRenderer};
 
 //====================================================================
