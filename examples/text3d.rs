@@ -26,6 +26,7 @@ use shipyard::{
 fn main() {
     env_logger::Builder::new()
         .filter_module("cabat", log::LevelFilter::Trace)
+        .filter_module("wgpu", log::LevelFilter::Warn)
         .format_timestamp(None)
         .init();
 
@@ -50,8 +51,8 @@ struct Translation {
 pub struct Text3dPlugin;
 
 impl Plugin for Text3dPlugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        workload_builder
+    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+        builder
             .add_workload(
                 Stages::Setup,
                 (sys_setup_renderer, sys_setup_entities).into_sequential_workload(),

@@ -24,8 +24,8 @@ use super::{sys_setup_text_components, TextFontSystem, TextSwashCache};
 pub struct Text2dPlugin;
 
 impl Plugin for Text2dPlugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        workload_builder
+    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+        builder
             .add_workload_first(
                 Stages::Setup,
                 (sys_setup_text_components, sys_setup_text_pipeline)

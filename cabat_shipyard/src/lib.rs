@@ -5,7 +5,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use shipyard::{info::TypeId, IntoWorkload, Unique, WorkloadModificator, World};
+use shipyard::{info::TypeId, IntoWorkload, Unique, WorkloadModificator};
 
 //====================================================================
 
@@ -116,12 +116,20 @@ impl Iterator for SubStages {
 
 //====================================================================
 
+pub trait Plugin {
+    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder;
+}
+
+//--------------------------------------------------
+
 pub struct WorkloadBuilder<'a> {
     world: &'a shipyard::World,
     workloads: HashMap<Stages, WorkloadToBuild>,
     event_workloads: HashMap<TypeId, shipyard::Workload>,
+    event_workload_names: HashMap<String, String>, // Type ID : Event name
 
-    plugin_text: String,
+    build_tabs: u8,
+    build_text: String,
 }
 
 struct WorkloadToBuild {
@@ -138,27 +146,113 @@ impl WorkloadToBuild {
     }
 }
 
+//--------------------------------------------------
+
 impl<'a> WorkloadBuilder<'a> {
     pub fn new(world: &'a shipyard::World) -> Self {
         Self {
             world,
             workloads: HashMap::new(),
             event_workloads: HashMap::new(),
+            event_workload_names: HashMap::new(),
 
-            plugin_text: String::new(),
+            build_tabs: 0,
+            build_text: "Setting up Workload Builder".to_string(),
         }
     }
 
-    pub fn add_workload_sub(
+    pub fn build(self) {
+        log::trace!("{}", self.build_text);
+
+        self.workloads.into_iter().for_each(|(_, mut to_build)| {
+            enum_iterator::all::<SubStages>()
+                .into_iter()
+                .fold(to_build.main, |acc, substage| {
+                    // Check and Add substage if it exists
+                    match to_build.substages.remove(&substage) {
+                        Some(workload) => {
+                            let workload = workload.tag(substage);
+                            // Go through substages and add before all
+                            acc.merge(substage.into_iter().fold(workload, |acc, substage_after| {
+                                acc.before_all(substage_after)
+                            }))
+                        }
+                        None => acc,
+                    }
+                })
+                .add_to_world(&self.world)
+                .unwrap();
+        });
+
+        // Make sure all workloads exist in world, even if empty
+        enum_iterator::all::<Stages>()
+            .into_iter()
+            .for_each(
+                |stage| match shipyard::Workload::new(stage).add_to_world(&self.world) {
+                    Ok(_) | Err(shipyard::error::AddWorkload::AlreadyExists) => {}
+                    Err(e) => panic!("{e}"),
+                },
+            );
+
+        // Process events
+        let ids = self
+            .event_workloads
+            .into_iter()
+            .map(|(id, workload)| {
+                workload.add_to_world(&self.world).unwrap();
+                id
+            })
+            .collect::<Vec<_>>();
+
+        let event_handler = EventHandler {
+            event_subscribers: ids,
+            ..Default::default()
+        };
+
+        self.world.add_unique(event_handler);
+
+        // Print debug data
+        let data = self.world.workloads_info().0.iter().fold(
+            String::from("Building workloads. Registered Stages and functions:"),
+            |acc, (name, workload_info)| {
+                let name = match self.event_workload_names.get(name) {
+                    Some(event_name) => event_name,
+                    None => name,
+                };
+
+                let acc = format!("{}\n{}", acc, name);
+
+                workload_info
+                    .batch_info
+                    .iter()
+                    .fold(acc, |acc, batch_info| {
+                        batch_info
+                            .systems()
+                            .fold(acc, |acc, system| format!("{}\n    {}", acc, system.name))
+                    })
+            },
+        );
+
+        log::debug!("{data}");
+    }
+}
+
+impl<'a> WorkloadBuilder<'a> {
+    fn log(&mut self, text: String) {
+        let tabs = (0..self.build_tabs).map(|_| "\t").collect::<String>();
+        self.build_text = format!("{}\n{}⌙ {}", self.build_text, tabs, text);
+    }
+
+    fn add_workload_sub(
         mut self,
         stage: Stages,
         substage: SubStages,
         workload: shipyard::Workload,
     ) -> Self {
-        self.plugin_text = format!(
-            "{}\n\tAdding workload for stage '{:?}' - substage {:?}",
-            self.plugin_text, stage, substage
-        );
+        self.log(format!(
+            "Adding workload for stage '{:?}' - substage {:?}",
+            stage, substage
+        ));
 
         let mut old_workload = self
             .workloads
@@ -220,9 +314,16 @@ impl<'a> WorkloadBuilder<'a> {
 
     //--------------------------------------------------
 
+    // TODO - Find way to convert to use IntoWorkload
     pub fn add_event<E: Event>(mut self, workload: shipyard::Workload) -> Self {
         let id = TypeId::of::<E>();
 
+        self.log(format!(
+            "Adding workload for event '{}'",
+            std::any::type_name::<E>()
+        ));
+
+        // Get existing workload or create new one
         let old_workload = self
             .event_workloads
             .remove(&id)
@@ -231,91 +332,51 @@ impl<'a> WorkloadBuilder<'a> {
         self.event_workloads
             .insert(id, old_workload.merge(workload));
 
+        // Store event type name
+        self.event_workload_names
+            .entry(format!("{:?}", id))
+            .or_insert(std::any::type_name::<E>().to_string());
+
         self
     }
 
     pub fn add_plugin<T: Plugin>(mut self, plugin: T) -> Self {
-        self.plugin_text = format!("Adding plugin '{}'", std::any::type_name::<T>());
-        let builder = plugin.build(self);
+        self.log(format!("Adding plugin '{}'", std::any::type_name::<T>()));
+        self.build_tabs += 1;
 
-        log::trace!("{}", builder.plugin_text);
+        self = plugin.build(self);
+        self.build_tabs -= 1;
 
-        builder
-    }
-
-    pub fn build(self) {
-        self.workloads.into_iter().for_each(|(_, mut to_build)| {
-            enum_iterator::all::<SubStages>()
-                .into_iter()
-                .fold(to_build.main, |acc, substage| {
-                    // Check and Add substage if it exists
-                    match to_build.substages.remove(&substage) {
-                        Some(workload) => {
-                            let workload = workload.tag(substage);
-                            // Go through substages and add before all
-                            acc.merge(substage.into_iter().fold(workload, |acc, substage_after| {
-                                acc.before_all(substage_after)
-                            }))
-
-                            //
-                        }
-                        None => acc,
-                    }
-                })
-                .add_to_world(&self.world)
-                .unwrap();
-        });
-
-        // Print debug data
-        let data = self.world.workloads_info().0.iter().fold(
-            String::from("Building workloads. Registered Stages and functions:"),
-            |acc, (name, workload_info)| {
-                let acc = format!("{}\n{}", acc, name);
-
-                workload_info
-                    .batch_info
-                    .iter()
-                    .fold(acc, |acc, batch_info| {
-                        batch_info
-                            .systems()
-                            .fold(acc, |acc, system| format!("{}\n    {}", acc, system.name))
-                    })
-            },
-        );
-
-        log::debug!("{data}");
-
-        // Make sure all workloads exist in world, even if empty
-        enum_iterator::all::<Stages>()
-            .into_iter()
-            .for_each(
-                |stage| match shipyard::Workload::new(stage).add_to_world(&self.world) {
-                    Ok(_) | Err(shipyard::error::AddWorkload::AlreadyExists) => {}
-                    Err(e) => panic!("{e}"),
-                },
-            );
-
-        // Process events
-        let ids = self
-            .event_workloads
-            .into_iter()
-            .map(|(id, workload)| {
-                workload.add_to_world(&self.world).unwrap();
-                id
-            })
-            .collect::<Vec<_>>();
-
-        let event_handler = EventHandler {
-            event_subscribers: ids,
-            ..Default::default()
-        };
-
-        self.world.add_unique(event_handler);
+        self
     }
 }
 
-pub trait Plugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder;
+impl WorldTools for WorkloadBuilder<'_> {
+    fn and_run<B, S: shipyard::System<(), B>>(&self, system: S) -> &Self {
+        self.world.run(system);
+        self
+    }
+
+    fn and_run_with_data<Data, B, S: shipyard::System<(Data,), B>>(
+        &self,
+        system: S,
+        data: Data,
+    ) -> &Self {
+        self.world.run_with_data(system, data);
+        self
+    }
+}
+
+impl UniqueTools for WorkloadBuilder<'_> {
+    fn insert<U: shipyard::Unique + Send + Sync>(&self, unique: U) -> &Self {
+        self.world.add_unique(unique);
+        self
+    }
+
+    fn replace<U: shipyard::Unique + Send + Sync>(&self, unique: U) {
+        self.world.remove_unique::<U>().ok();
+        self.world.add_unique(unique);
+    }
 }
 
 //====================================================================
@@ -347,7 +408,7 @@ impl EventHandler {
     }
 }
 
-pub fn activate_events(world: &World) {
+pub fn activate_events(world: &shipyard::World) {
     let mut handler = world.borrow::<ResMut<EventHandler>>().unwrap();
 
     match handler.pending.is_empty() {

@@ -28,8 +28,8 @@ pub mod crates {
 pub struct FullRendererPlugin;
 
 impl Plugin for FullRendererPlugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        workload_builder
+    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+        builder
             .add_plugin(CoreRendererPlugin)
             .add_plugin(plugins::Text2dPlugin)
     }
@@ -40,8 +40,8 @@ impl Plugin for FullRendererPlugin {
 pub struct CoreRendererPlugin;
 
 impl Plugin for CoreRendererPlugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        workload_builder
+    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+        builder
             .add_workload_first(
                 Stages::Setup,
                 (

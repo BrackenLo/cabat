@@ -19,8 +19,8 @@ pub use winit::{event::MouseButton, keyboard::KeyCode};
 pub struct ToolsPlugin;
 
 impl Plugin for ToolsPlugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        workload_builder
+    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+        builder
             .add_workload(Stages::Setup, sys_setup_uniques)
             .add_workload(Stages::First, sys_update_time)
             .add_workload(
