@@ -15,12 +15,15 @@ pub mod render_tools;
 pub mod shared;
 pub mod text;
 pub mod texture;
-pub mod texture3d_pipeliners;
+pub mod texture3d_renderer;
 
 //====================================================================
 
 pub mod plugins {
-    pub use crate::{text::Text2dPlugin, text::Text3dPlugin, CoreRendererPlugin};
+    pub use crate::{
+        text::Text2dPlugin, text::Text3dPlugin, texture3d_renderer::Texture3dPlugin,
+        CoreRendererPlugin,
+    };
 }
 
 pub mod crates {
@@ -35,6 +38,7 @@ impl Plugin for FullRendererPlugin {
     fn build(self, builder: &WorkloadBuilder) {
         builder
             .add_plugin(CoreRendererPlugin)
+            .add_plugin(plugins::Texture3dPlugin)
             .add_plugin(plugins::Text2dPlugin)
             .add_plugin(plugins::Text3dPlugin);
     }

@@ -10,13 +10,12 @@ use std::{
 };
 
 use crossbeam::channel::TryRecvError;
-use parking_lot::RwLock;
 use rustc_hash::FxHasher;
 use shipyard::{AllStoragesView, Unique};
 
 use crate::{
     asset_loader::{AssetLoaderOuter, AssetTypeLoader},
-    handle::{Handle, HandleId, HandleInner},
+    handle::{Handle, HandleId},
     Asset,
 };
 
@@ -29,8 +28,8 @@ pub(crate) type Hasher = BuildHasherDefault<FxHasher>;
 //====================================================================
 
 pub(crate) enum ReferenceCountSignal {
-    Increase(HandleInner),
-    Decrease(HandleInner),
+    Increase(HandleId),
+    Decrease(HandleId),
 }
 
 //--------------------------------------------------
@@ -58,20 +57,25 @@ impl Debug for AssetLoadError {
             AssetLoadError::FileDoesNotExist(path_buf) => {
                 f.write_fmt(format_args!("File does not exist at path '{:?}'", path_buf))
             }
+
             AssetLoadError::IsNotFile(path_buf) => f.write_fmt(format_args!(
                 "Provided path is not file at '{:?}'",
                 path_buf
             )),
+
             AssetLoadError::InvalidExtension => f.write_str("Invalid extension provided"),
+
             AssetLoadError::NoLoaderForType(type_name, ext) => f.write_fmt(format_args!(
                 "No loader for provided type '{}' and file extension '{}'",
                 type_name, ext
             )),
+
             AssetLoadError::InvalidCastType(type_id, type_id1) => f.write_fmt(format_args!(
                 "Cannot create asset of type '{:?}' from loaded type '{:?}'",
                 type_id, type_id1
             )),
-            AssetLoadError::Other(_) => todo!(),
+
+            AssetLoadError::Other(e) => f.write_fmt(format_args!("{}", e)),
         }
     }
 }
@@ -84,6 +88,35 @@ impl Display for AssetLoadError {
 
 //====================================================================
 
+struct InnerStorage {
+    current_id: HandleId,
+    // asset_type: TypeId,
+    loaded_assets: HashMap<HandleId, Arc<dyn Asset>, Hasher>,
+    handle_count: HashMap<HandleId, u32, Hasher>,
+}
+impl InnerStorage {
+    fn new<A: Asset>() -> Self {
+        Self {
+            current_id: HandleId::from_id::<A>(0),
+            // asset_type: std::any::TypeId::of::<A>(),
+            loaded_assets: HashMap::default(),
+            handle_count: HashMap::default(),
+        }
+    }
+
+    fn insert_data(&mut self, data: Arc<dyn Asset>) -> HandleId {
+        let id = self.current_id.get_next();
+
+        self.loaded_assets.insert(id, data);
+        self.handle_count.insert(id, 0);
+
+        id
+    }
+}
+
+//--------------------------------------------------
+
+// TODO - Track asset paths
 #[derive(Unique)]
 pub struct AssetStorage {
     sender: Sender,
@@ -92,13 +125,10 @@ pub struct AssetStorage {
     // Path to load assets from
     load_path: PathBuf,
 
-    current_id: HandleInner,
     asset_loaders: HashMap<TypeId, Arc<dyn AssetLoaderOuter>, Hasher>,
+    storages: HashMap<TypeId, InnerStorage, Hasher>,
 
-    // TODO - use seperate hash maps for different assets
-    loaded: HashMap<HandleInner, Arc<RwLock<dyn Asset>>, Hasher>,
-    handle_count: HashMap<HandleInner, u32, Hasher>,
-    removed_assets: Vec<HandleInner>,
+    removed_assets: Vec<HandleId>,
 }
 
 impl Default for AssetStorage {
@@ -116,11 +146,9 @@ impl Default for AssetStorage {
 
             load_path,
 
-            current_id: HandleInner::from_id(0),
-            asset_loaders: HashMap::with_hasher(Hasher::default()),
+            asset_loaders: HashMap::default(),
+            storages: HashMap::default(),
 
-            loaded: HashMap::with_hasher(Hasher::default()),
-            handle_count: HashMap::with_hasher(Hasher::default()),
             removed_assets: Vec::new(),
         }
     }
@@ -141,21 +169,6 @@ impl AssetStorage {
 //====================================================================
 
 impl AssetStorage {
-    // pub fn insert_data<T: Asset>(&mut self, data: T) -> Handle<T> {
-    //     let id = self.current_id.get_next();
-
-    //     let handle_inner = Arc::new(data);
-
-    //     // Add reference to data to storage
-    //     self.loaded.insert(id, handle_inner.clone());
-    //     self.handle_count.insert(id, 0);
-
-    //     // Construct Handle and return
-    //     let handle_id = HandleId::new(id);
-    //     let handle = Handle::new(handle_id, self.sender.clone(), handle_inner);
-    //     handle
-    // }
-
     pub fn load_file<'a, A>(
         &mut self,
         all_storages: AllStoragesView,
@@ -213,19 +226,39 @@ impl AssetStorage {
             AssetLoadError::InvalidCastType(loaded_asset.type_name, type_name.to_string())
         })?;
 
-        let data = Arc::new(RwLock::new(*data));
+        let data = Arc::new(*data);
 
-        let id = self.current_id.get_next();
+        let storage = self
+            .storages
+            .entry(type_id)
+            .or_insert(InnerStorage::new::<A>());
 
-        self.loaded.insert(id, data.clone());
-        self.handle_count.insert(id, 0);
-
-        let handle_id = HandleId::new(id);
+        let handle_id = storage.insert_data(data.clone());
         let handle = Handle::new(handle_id, self.sender.clone(), data);
 
         Ok(handle)
 
         //--------------------------------------------------
+    }
+
+    pub fn get_storage<A: Asset>(&self) -> Option<&HashMap<HandleId, Arc<dyn Asset>, Hasher>> {
+        let id = TypeId::of::<A>();
+        let storage = self.storages.get(&id)?;
+
+        Some(&storage.loaded_assets)
+    }
+
+    pub fn get_asset<A: Asset>(&self, id: impl Into<HandleId>) -> Option<&A> {
+        let id: HandleId = id.into();
+
+        assert!(id.get_type_id() == std::any::TypeId::of::<A>());
+
+        let storage = self.storages.get(&id.get_type_id())?;
+
+        let asset_any = storage.loaded_assets.get(&id)?;
+        let value = asset_any.as_ref().as_any().downcast_ref::<A>().unwrap();
+
+        Some(value)
     }
 }
 
@@ -247,20 +280,30 @@ impl AssetStorage {
 
             match data {
                 // New handle has been created
-                ReferenceCountSignal::Increase(handle_inner) => {
-                    match self.handle_count.get_mut(&handle_inner) {
+                ReferenceCountSignal::Increase(handle_id) => {
+                    let storage = match self.storages.get_mut(&handle_id.get_type_id()) {
+                        Some(storage) => storage,
+                        None => unimplemented!(),
+                    };
+
+                    match storage.handle_count.get_mut(&handle_id) {
                         Some(count) => *count += 1,
                         None => unimplemented!(),
-                    }
+                    };
                 }
 
                 // Existing handle has been destroyed
-                ReferenceCountSignal::Decrease(handle_inner) => {
-                    match self.handle_count.get_mut(&handle_inner) {
+                ReferenceCountSignal::Decrease(handle_id) => {
+                    let storage = match self.storages.get_mut(&handle_id.get_type_id()) {
+                        Some(storage) => storage,
+                        None => unimplemented!(),
+                    };
+
+                    match storage.handle_count.get_mut(&handle_id) {
                         Some(count) => {
                             *count -= 1;
                             if *count == 0 {
-                                self.removed_assets.push(handle_inner);
+                                self.removed_assets.push(handle_id);
                             }
                         }
                         None => unimplemented!(),
@@ -270,12 +313,24 @@ impl AssetStorage {
         }
 
         // Remove pending assets
-        self.removed_assets.iter().for_each(|to_remove| {
-            self.loaded.remove(&to_remove);
-            self.handle_count.remove(&to_remove);
+        self.removed_assets.iter().for_each(|handle_id| {
+            let storage = match self.storages.get_mut(&handle_id.get_type_id()) {
+                Some(storage) => storage,
+                None => unimplemented!(),
+            };
+
+            storage.loaded_assets.remove(&handle_id);
+            storage.handle_count.remove(&handle_id);
 
             // TODO - Asset path removal
         });
+    }
+}
+
+impl Drop for AssetStorage {
+    fn drop(&mut self) {
+        log::trace!("Dropping asset storage and all handles");
+        // TODO - Drop all handles here else lots of warnings
     }
 }
 

@@ -11,7 +11,7 @@ pub mod common {
 pub mod renderer {
     pub use cabat_renderer::{
         camera::{Camera, CameraUniform, OrthographicCamera, PerspectiveCamera},
-        crates, plugins, render_tools, shared, text, texture, texture3d_pipeliners, ClearColor,
+        crates, plugins, render_tools, shared, text, texture, texture3d_renderer, ClearColor,
         Device, FullRendererPlugin, Queue, RenderEncoder, RenderPass, RenderPassDesc, Surface,
         SurfaceConfig, Vertex,
     };
@@ -41,7 +41,7 @@ pub mod assets {
     pub use cabat_assets::{
         asset_loader::AssetTypeLoader,
         asset_storage::AssetStorage,
-        handle::{Handle, HandleId, HandleInner},
+        handle::{Handle, HandleId},
         Asset, AssetStoragePlugin,
     };
 }

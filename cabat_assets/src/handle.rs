@@ -1,13 +1,11 @@
 //====================================================================
 
 use std::{
+    any::TypeId,
     fmt::{Debug, Display},
     hash::Hash,
-    marker::PhantomData,
     sync::Arc,
 };
-
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::{
     asset_storage::{ReferenceCountSignal, Sender},
@@ -17,73 +15,43 @@ use crate::{
 //====================================================================
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
-pub struct HandleInner(u32);
+pub struct HandleId {
+    id: u32,
+    type_id: TypeId,
+}
 
-impl HandleInner {
+impl HandleId {
     #[inline]
-    pub(crate) fn from_id(id: u32) -> Self {
-        Self(id)
+    pub(crate) fn from_id<A: Asset>(id: u32) -> Self {
+        Self {
+            id,
+            type_id: TypeId::of::<A>(),
+        }
     }
 
     pub(crate) fn get_next(&mut self) -> Self {
         let id = *self;
-        self.0 += 1;
+        self.id += 1;
         id
     }
-}
 
-//--------------------------------------------------
-
-pub struct HandleId<A: Asset> {
-    id: HandleInner,
-    data: PhantomData<A>,
-}
-
-impl<A: Asset> HandleId<A> {
-    pub(crate) fn new(id: HandleInner) -> Self {
-        Self {
-            id,
-            data: PhantomData,
-        }
+    #[inline]
+    pub(crate) fn get_type_id(&self) -> TypeId {
+        self.type_id
     }
 }
 
-impl<A: Asset> Hash for HandleId<A> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state)
-    }
-}
-
-impl<A: Asset> Clone for HandleId<A> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<A: Asset> Copy for HandleId<A> {}
-
-impl<A: Asset> PartialEq for HandleId<A> {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl<A: Asset> Eq for HandleId<A> {}
-
-impl<A: Asset> Display for HandleId<A> {
+// TODO
+impl Display for HandleId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} - {}", std::any::type_name::<A>(), self.id.0)
+        write!(f, "ID: {}", self.id)
     }
 }
 
-impl<A: Asset> Debug for HandleId<A> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "HandleId(id: {:?}, data_type: {})",
-            self.id,
-            std::any::type_name::<A>()
-        )
+impl<A: Asset> From<Handle<A>> for HandleId {
+    #[inline]
+    fn from(value: Handle<A>) -> Self {
+        value.handle_id
     }
 }
 
@@ -91,15 +59,21 @@ impl<A: Asset> Debug for HandleId<A> {
 
 #[derive(Debug)]
 pub struct Handle<A: Asset> {
-    handle_id: HandleId<A>,
+    handle_id: HandleId,
     sender: Sender,
-    asset: Arc<RwLock<A>>,
+    asset: Arc<A>,
 }
 
 impl<A: Asset> Handle<A> {
-    pub(crate) fn new(handle_id: HandleId<A>, sender: Sender, asset: Arc<RwLock<A>>) -> Self {
+    pub(crate) fn new(handle_id: HandleId, sender: Sender, asset: Arc<A>) -> Self {
+        log::trace!(
+            "Creating new handle '{} - {}'",
+            std::any::type_name::<A>(),
+            handle_id
+        );
+
         sender
-            .send(ReferenceCountSignal::Increase(handle_id.id))
+            .send(ReferenceCountSignal::Increase(handle_id))
             .unwrap();
 
         Self {
@@ -110,19 +84,24 @@ impl<A: Asset> Handle<A> {
     }
 
     #[inline]
-    pub fn id(&self) -> HandleId<A> {
+    pub fn id(&self) -> HandleId {
         self.handle_id
     }
 
     #[inline]
-    pub fn inner(&self) -> RwLockReadGuard<A> {
-        self.asset.read()
+    pub fn inner(&self) -> &A {
+        self.asset.as_ref()
     }
 
-    #[inline]
-    pub fn inner_mut(&mut self) -> RwLockWriteGuard<A> {
-        self.asset.write()
-    }
+    // #[inline]
+    // pub fn inner(&self) -> RwLockReadGuard<A> {
+    //     self.asset.read()
+    // }
+
+    // #[inline]
+    // pub fn inner_mut(&mut self) -> RwLockWriteGuard<A> {
+    //     self.asset.write()
+    // }
 }
 
 impl<A: Asset> Clone for Handle<A> {
@@ -144,16 +123,28 @@ where
     A: Asset + Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Handle {}: {}", self.handle_id, self.asset.read())
+        write!(
+            f,
+            "Handle '{} - {}': {}",
+            std::any::type_name::<A>(),
+            self.handle_id,
+            self.asset
+        )
     }
 }
 
 impl<A: Asset> Drop for Handle<A> {
     fn drop(&mut self) {
+        log::trace!(
+            "Dropping handle '{} - {}'",
+            std::any::type_name::<A>(),
+            self.handle_id
+        );
+
         // TODO - Better err handling
         if let Err(_) = self
             .sender
-            .send(ReferenceCountSignal::Decrease(self.handle_id.id))
+            .send(ReferenceCountSignal::Decrease(self.handle_id))
         {
             log::warn!(
                 "Failed to send decrease signal on destruction of handle {:?}",

@@ -49,7 +49,7 @@ fn sys_setup_text_pipeline(
         device.inner(),
         config.inner(),
         &atlas,
-        camera.0.bind_group_layout(),
+        camera.bind_group_layout(),
     );
 
     all_storages.add_unique(pipeline);
@@ -100,7 +100,7 @@ fn sys_render_text(
     renderer.render(
         render_pass.pass(),
         &text_atlas,
-        camera.0.bind_group(),
+        camera.bind_group(),
         v_text_buffers.iter(),
     )
 }

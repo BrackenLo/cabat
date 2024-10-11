@@ -3,7 +3,6 @@
 use std::path::PathBuf;
 
 use cabat::{assets::AssetStorage, DefaultPlugins};
-use cabat_assets::Asset;
 use cabat_runner::Runner;
 use cabat_shipyard::prelude::*;
 use shipyard::AllStoragesView;
@@ -25,15 +24,11 @@ fn main() {
 }
 
 fn sys_load_stuff(storages: AllStoragesView, mut asset_storage: ResMut<AssetStorage>) {
-    let path = PathBuf::new().join("hello.txt");
+    let path = PathBuf::new().join("ipsum.txt");
 
     let data = asset_storage.load_file::<String>(storages, &path).unwrap();
 
-    println!("data = {}", data);
+    println!("{}", data);
 }
 
 //====================================================================
-
-pub struct ThisStruct;
-
-impl Asset for ThisStruct {}
