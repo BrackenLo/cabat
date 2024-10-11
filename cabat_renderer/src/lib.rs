@@ -1,22 +1,29 @@
 //====================================================================
 
+use cabat_assets::RegisterAssetLoader;
 use cabat_common::{Size, WindowRaw, WindowResizeEvent, WindowSize};
 use cabat_shipyard::{prelude::*, UniqueTools};
+use loader::TextureLoader;
 use pollster::FutureExt;
+use shared::SharedPipelineResources;
 use shipyard::{AllStoragesView, IntoWorkload, SystemModificator, Unique, WorkloadModificator};
 use texture::DepthTexture;
 
 pub mod camera;
+pub mod loader;
 pub mod render_tools;
 pub mod shared;
-pub mod text2d_pipeline;
+pub mod text;
 pub mod texture;
-pub mod texture3d_pipeliners;
+pub mod texture3d_renderer;
 
 //====================================================================
 
 pub mod plugins {
-    pub use crate::{text2d_pipeline::Text2dPlugin, CoreRendererPlugin};
+    pub use crate::{
+        text::Text2dPlugin, text::Text3dPlugin, texture3d_renderer::Texture3dPlugin,
+        CoreRendererPlugin,
+    };
 }
 
 pub mod crates {
@@ -28,10 +35,12 @@ pub mod crates {
 pub struct FullRendererPlugin;
 
 impl Plugin for FullRendererPlugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        workload_builder
+    fn build(self, builder: &WorkloadBuilder) {
+        builder
             .add_plugin(CoreRendererPlugin)
+            .add_plugin(plugins::Texture3dPlugin)
             .add_plugin(plugins::Text2dPlugin)
+            .add_plugin(plugins::Text3dPlugin);
     }
 }
 
@@ -40,8 +49,9 @@ impl Plugin for FullRendererPlugin {
 pub struct CoreRendererPlugin;
 
 impl Plugin for CoreRendererPlugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        workload_builder
+    fn build(self, builder: &WorkloadBuilder) {
+        builder
+            .register_loader(TextureLoader)
             .add_workload_first(
                 Stages::Setup,
                 (
@@ -56,10 +66,7 @@ impl Plugin for CoreRendererPlugin {
                 Stages::Render,
                 (sys_setup_encoder, sys_setup_render_pass).into_sequential_workload(),
             )
-            .add_workload_post(
-                Stages::Render,
-                (sys_finish_main_render_pass).into_workload(),
-            )
+            .add_workload_post(Stages::Render, sys_finish_main_render_pass)
             .add_workload_last(
                 Stages::Render,
                 (sys_submit_encoder).into_workload().tag("submit_encoder"),
@@ -70,7 +77,7 @@ impl Plugin for CoreRendererPlugin {
                     texture::sys_resize_depth_texture.skip_if_missing_unique::<DepthTexture>(),
                 )
                     .into_workload(),
-            )
+            );
     }
 }
 
@@ -210,8 +217,14 @@ fn sys_setup_renderer_components(all_storages: AllStoragesView, window: Res<Wind
         .insert(SurfaceConfig(config));
 }
 
-fn sys_setup_misc(all_storages: AllStoragesView) {
-    all_storages.add_unique(ClearColor::default());
+fn sys_setup_misc(all_storages: AllStoragesView, device: Res<Device>) {
+    all_storages
+        .insert(SharedPipelineResources::new(device.inner()))
+        .insert(ClearColor::default())
+        .insert(camera::MainCamera(camera::Camera::new(
+            device.inner(),
+            &camera::PerspectiveCamera::default(),
+        )));
 }
 
 //====================================================================

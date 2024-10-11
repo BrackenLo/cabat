@@ -28,11 +28,12 @@ pub struct Runner {
 impl Runner {
     pub fn run<F>(build_app: F)
     where
-        F: FnOnce(WorkloadBuilder) -> WorkloadBuilder,
+        F: FnOnce(&WorkloadBuilder),
     {
         let world = shipyard::World::new();
         let builder = WorkloadBuilder::new(&world);
-        build_app(builder).build();
+        build_app(&builder);
+        builder.build();
 
         let mut runner = Self {
             state: RunnerState::Waiting(world),

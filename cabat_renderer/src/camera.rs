@@ -1,6 +1,36 @@
 //====================================================================
 
+use shipyard::Unique;
 use wgpu::util::DeviceExt;
+
+//====================================================================
+
+#[derive(Unique)]
+pub struct MainCamera(pub Camera);
+
+impl MainCamera {
+    #[inline]
+    pub fn new<C: CameraUniform>(device: &wgpu::Device, camera: &C) -> Self {
+        Self(Camera::new(device, camera))
+    }
+
+    #[inline]
+    pub fn update_camera<C: CameraUniform>(&self, queue: &wgpu::Queue, camera: &C) {
+        self.0.update_camera(queue, camera);
+    }
+
+    #[inline]
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        self.0.bind_group_layout()
+    }
+
+    #[inline]
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        self.0.bind_group()
+    }
+}
+
+// TODO - Create MainUiCamera (orthographic projection)
 
 //====================================================================
 

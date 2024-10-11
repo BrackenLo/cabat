@@ -11,9 +11,9 @@ pub mod common {
 pub mod renderer {
     pub use cabat_renderer::{
         camera::{Camera, CameraUniform, OrthographicCamera, PerspectiveCamera},
-        crates, plugins, render_tools, shared, text2d_pipeline, texture, texture3d_pipeliners,
-        ClearColor, Device, FullRendererPlugin, Queue, RenderEncoder, RenderPass, RenderPassDesc,
-        Surface, SurfaceConfig, Vertex,
+        crates, plugins, render_tools, shared, text, texture, texture3d_renderer, ClearColor,
+        Device, FullRendererPlugin, Queue, RenderEncoder, RenderPass, RenderPassDesc, Surface,
+        SurfaceConfig, Vertex,
     };
 }
 
@@ -33,18 +33,29 @@ pub mod shipyard_tools {
     };
 }
 
+pub mod spatial {
+    pub use cabat_spatial::Transform;
+}
+
+pub mod assets {
+    pub use cabat_assets::{
+        asset_loader::AssetTypeLoader,
+        asset_storage::AssetStorage,
+        handle::{Handle, HandleId},
+        Asset, AssetStoragePlugin,
+    };
+}
+
 //====================================================================
 
 pub struct DefaultPlugins;
 
 impl Plugin for DefaultPlugins {
-    fn build(
-        self,
-        workload_builder: cabat_shipyard::WorkloadBuilder,
-    ) -> cabat_shipyard::WorkloadBuilder {
+    fn build(self, workload_builder: &cabat_shipyard::WorkloadBuilder) {
         workload_builder
             .add_plugin(runner::ToolsPlugin)
-            .add_plugin(renderer::FullRendererPlugin)
+            .add_plugin(assets::AssetStoragePlugin)
+            .add_plugin(renderer::FullRendererPlugin);
     }
 }
 

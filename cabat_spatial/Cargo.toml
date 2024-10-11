@@ -1,10 +1,11 @@
 [package]
-name = "cabat_common"
+name = "cabat_spatial"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+cabat_common.path = "../cabat_common"
 cabat_shipyard.path = "../cabat_shipyard"
+glam = "0.29.0"
 log.workspace = true
-raw-window-handle = "0.6.2"
 shipyard.workspace = true

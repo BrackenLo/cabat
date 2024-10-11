@@ -1,5 +1,6 @@
 //====================================================================
 
+use cabat_assets::Asset;
 use cabat_common::{Size, WindowSize};
 use cabat_shipyard::{Res, ResMut};
 use image::GenericImageView;
@@ -12,23 +13,23 @@ use crate::Device;
 #[derive(shipyard::Unique)]
 pub struct DepthTexture {
     // Main Depth texture
-    depth_texture: Texture,
+    depth_texture: RawTexture,
 }
 
 impl DepthTexture {
     pub fn new(device: &wgpu::Device, size: Size<u32>) -> Self {
-        let depth_texture = Texture::create_depth_texture(&device, size, "Main Depth Texture");
+        let depth_texture = RawTexture::create_depth_texture(&device, size, "Main Depth Texture");
 
         Self { depth_texture }
     }
 
     #[inline]
-    pub fn main_texture(&self) -> &Texture {
+    pub fn main_texture(&self) -> &RawTexture {
         &self.depth_texture
     }
 
     fn resize(&mut self, device: &wgpu::Device, size: Size<u32>) {
-        self.depth_texture = Texture::create_depth_texture(device, size, "Main Depth Texture");
+        self.depth_texture = RawTexture::create_depth_texture(device, size, "Main Depth Texture");
     }
 }
 
@@ -52,12 +53,38 @@ pub(super) fn sys_resize_depth_texture(
 //====================================================================
 
 pub struct Texture {
+    raw: RawTexture,
+    binding: wgpu::BindGroup,
+}
+
+impl Texture {
+    #[inline]
+    pub fn new(raw: RawTexture, binding: wgpu::BindGroup) -> Self {
+        Self { raw, binding }
+    }
+
+    #[inline]
+    pub fn raw(&self) -> &RawTexture {
+        &self.raw
+    }
+
+    #[inline]
+    pub fn binding(&self) -> &wgpu::BindGroup {
+        &self.binding
+    }
+}
+
+impl Asset for Texture {}
+
+//====================================================================
+
+pub struct RawTexture {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub sampler: wgpu::Sampler,
 }
 
-impl Texture {
+impl RawTexture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
     pub fn create_depth_texture(
@@ -108,7 +135,7 @@ impl Texture {
 
 //--------------------------------------------------
 
-impl Texture {
+impl RawTexture {
     // Create a wgpu Texture from given RGB values.
     pub fn from_color(
         device: &wgpu::Device,
@@ -200,6 +227,73 @@ impl Texture {
             view,
             sampler,
         }
+    }
+
+    pub fn from_size(
+        device: &wgpu::Device,
+        size: Size<u32>,
+        label: Option<&str>,
+        sampler: Option<&wgpu::SamplerDescriptor>,
+    ) -> Self {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label,
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(sampler.unwrap_or(&wgpu::SamplerDescriptor::default()));
+
+        Self {
+            texture,
+            view,
+            sampler,
+        }
+    }
+}
+
+impl RawTexture {
+    pub fn update_area(
+        &mut self,
+        queue: &wgpu::Queue,
+        data: &[u8],
+        start_x: u32,
+        start_y: u32,
+        data_width: u32,
+        data_height: u32,
+    ) {
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: start_x,
+                    y: start_y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(data_width),
+                rows_per_image: None, //Some(data_height),
+            },
+            wgpu::Extent3d {
+                width: data_width,
+                height: data_height,
+                depth_or_array_layers: 1,
+            },
+        );
     }
 }
 

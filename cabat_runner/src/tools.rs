@@ -8,7 +8,7 @@ use std::{
 
 use cabat_common::WindowSize;
 use cabat_shipyard::{prelude::*, UniqueTools};
-use shipyard::{AllStoragesView, IntoWorkload, Unique};
+use shipyard::{AllStoragesView, Unique};
 
 //====================================================================
 
@@ -19,19 +19,18 @@ pub use winit::{event::MouseButton, keyboard::KeyCode};
 pub struct ToolsPlugin;
 
 impl Plugin for ToolsPlugin {
-    fn build(self, workload_builder: WorkloadBuilder) -> WorkloadBuilder {
-        workload_builder
-            .add_workload(Stages::Setup, (sys_setup_uniques).into_workload())
-            .add_workload(Stages::First, (sys_update_time).into_workload())
+    fn build(self, builder: &WorkloadBuilder) {
+        builder
+            .add_workload(Stages::Setup, sys_setup_uniques)
+            .add_workload(Stages::First, sys_update_time)
             .add_workload(
                 Stages::Last,
                 (
                     sys_reset_input::<KeyCode>,
                     sys_reset_input::<MouseButton>,
                     sys_reset_mouse_input,
-                )
-                    .into_workload(),
-            )
+                ),
+            );
     }
 }
 

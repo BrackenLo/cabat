@@ -1,6 +1,74 @@
 //====================================================================
 
+use shipyard::Unique;
+
+use crate::{
+    render_tools,
+    texture::{RawTexture, Texture},
+};
+
 use super::Vertex;
+
+//====================================================================
+
+#[derive(Unique)]
+pub struct SharedPipelineResources {
+    texture_bind_group_layout: wgpu::BindGroupLayout,
+}
+
+impl SharedPipelineResources {
+    pub fn new(device: &wgpu::Device) -> Self {
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Texture 3d Bind Group Layout"),
+                entries: &[
+                    render_tools::bgl_texture_entry(0),
+                    render_tools::bgl_sampler_entry(1),
+                ],
+            });
+
+        Self {
+            texture_bind_group_layout,
+        }
+    }
+
+    #[inline]
+    pub fn texture_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.texture_bind_group_layout
+    }
+
+    pub fn create_bind_group(
+        &self,
+        device: &wgpu::Device,
+        texture: &RawTexture,
+        label: Option<&str>,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label,
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&texture.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
+                },
+            ],
+        })
+    }
+
+    pub fn load_texture(
+        &self,
+        device: &wgpu::Device,
+        texture: RawTexture,
+        label: Option<&str>,
+    ) -> Texture {
+        let bind_group = self.create_bind_group(device, &texture, label);
+        Texture::new(texture, bind_group)
+    }
+}
 
 //====================================================================
 
