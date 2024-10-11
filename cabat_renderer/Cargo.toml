@@ -1,14 +1,14 @@
 [package]
 name = "cabat_renderer"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
 bytemuck = { version = "1.18.0", features = ["derive"] }
-cabat_assets = { version = "0.1.0", path = "../cabat_assets" }
-cabat_common = { path = "../cabat_common", version = "0.1.0" }
-cabat_shipyard = { path = "../cabat_shipyard", version = "0.1.0" }
-cabat_spatial = { version = "0.1.0", path = "../cabat_spatial" }
+cabat_assets.path = "../cabat_assets"
+cabat_common.path = "../cabat_common"
+cabat_shipyard.path = "../cabat_shipyard"
+cabat_spatial.path = "../cabat_spatial"
 cosmic-text = "0.12.1"
 etagere = "0.2.13"
 glam = "0.29.0"

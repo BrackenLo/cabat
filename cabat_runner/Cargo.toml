@@ -7,8 +7,8 @@ edition = "2021"
 debug = []
 
 [dependencies]
-cabat_common = { path = "../cabat_common", version = "0.1.0" }
-cabat_shipyard = { path = "../cabat_shipyard", version = "0.1.0" }
+cabat_common.path = "../cabat_common" 
+cabat_shipyard.path = "../cabat_shipyard" 
 glam = "0.29.0"
 log.workspace = true
 shipyard.workspace = true

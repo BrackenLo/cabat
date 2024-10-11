@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+cabat_shipyard.path = "../cabat_shipyard"
 log.workspace = true
 raw-window-handle = "0.6.2"
 shipyard.workspace = true
-cabat_shipyard = { path = "../cabat_shipyard", version = "0.1.0" }
