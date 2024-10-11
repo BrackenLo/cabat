@@ -1,12 +1,16 @@
 //====================================================================
 
+use cabat_assets::RegisterAssetLoader;
 use cabat_common::{Size, WindowRaw, WindowResizeEvent, WindowSize};
 use cabat_shipyard::{prelude::*, UniqueTools};
+use loader::TextureLoader;
 use pollster::FutureExt;
+use shared::SharedPipelineResources;
 use shipyard::{AllStoragesView, IntoWorkload, SystemModificator, Unique, WorkloadModificator};
 use texture::DepthTexture;
 
 pub mod camera;
+pub mod loader;
 pub mod render_tools;
 pub mod shared;
 pub mod text;
@@ -43,6 +47,7 @@ pub struct CoreRendererPlugin;
 impl Plugin for CoreRendererPlugin {
     fn build(self, builder: &WorkloadBuilder) {
         builder
+            .register_loader(TextureLoader)
             .add_workload_first(
                 Stages::Setup,
                 (
@@ -209,11 +214,13 @@ fn sys_setup_renderer_components(all_storages: AllStoragesView, window: Res<Wind
 }
 
 fn sys_setup_misc(all_storages: AllStoragesView, device: Res<Device>) {
-    all_storages.add_unique(ClearColor::default());
-    all_storages.add_unique(camera::MainCamera(camera::Camera::new(
-        device.inner(),
-        &camera::PerspectiveCamera::default(),
-    )))
+    all_storages
+        .insert(SharedPipelineResources::new(device.inner()))
+        .insert(ClearColor::default())
+        .insert(camera::MainCamera(camera::Camera::new(
+            device.inner(),
+            &camera::PerspectiveCamera::default(),
+        )));
 }
 
 //====================================================================

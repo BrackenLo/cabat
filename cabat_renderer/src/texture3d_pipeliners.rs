@@ -5,9 +5,9 @@ use shipyard::Unique;
 use crate::{
     render_tools,
     shared::{
-        TextureRectVertex, TEXTURE_RECT_INDEX_COUNT, TEXTURE_RECT_INDICES, TEXTURE_RECT_VERTICES,
+        SharedPipelineResources, TextureRectVertex, TEXTURE_RECT_INDEX_COUNT, TEXTURE_RECT_INDICES,
+        TEXTURE_RECT_VERTICES,
     },
-    texture::Texture,
     Vertex,
 };
 
@@ -68,7 +68,6 @@ pub struct Texture3dInstanceToRender<'a> {
 #[derive(Unique)]
 pub struct Texture3dPipeline {
     pipeline: wgpu::RenderPipeline,
-    texture_bind_group_layout: wgpu::BindGroupLayout,
 
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -79,22 +78,14 @@ impl Texture3dPipeline {
     pub fn new(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
+        shared: &SharedPipelineResources,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Texture 3d Bind Group Layout"),
-                entries: &[
-                    render_tools::bgl_texture_entry(0),
-                    render_tools::bgl_sampler_entry(1),
-                ],
-            });
-
         let pipeline = render_tools::create_pipeline(
             device,
             config,
             "Texture 3d Pipeline",
-            &[camera_bind_group_layout, &texture_bind_group_layout],
+            &[camera_bind_group_layout, shared.texture_bind_group_layout()],
             &[TextureRectVertex::desc(), Texture3dInstanceRaw::desc()],
             include_str!("../shaders/texture3d.wgsl"),
             render_tools::RenderPipelineDescriptor::default()
@@ -109,33 +100,10 @@ impl Texture3dPipeline {
 
         Self {
             pipeline,
-            texture_bind_group_layout,
             vertex_buffer,
             index_buffer,
             index_count,
         }
-    }
-
-    #[inline]
-    pub fn texture_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        &self.texture_bind_group_layout
-    }
-
-    pub fn load_texture(&self, device: &wgpu::Device, texture: &Texture) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Texture 3d texture"),
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&texture.sampler),
-                },
-            ],
-        })
     }
 
     pub fn render(

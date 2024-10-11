@@ -10,6 +10,8 @@ pub mod asset_storage;
 pub mod handle;
 pub mod loaders;
 
+pub use anyhow::Result;
+
 //====================================================================
 
 pub trait Asset: Send + Sync + DowncastSync {}

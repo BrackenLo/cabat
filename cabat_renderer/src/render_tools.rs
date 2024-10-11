@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 
 use wgpu::util::DeviceExt;
 
-use crate::{texture::Texture, Vertex};
+use crate::{texture::RawTexture, Vertex};
 
 //====================================================================
 
@@ -33,7 +33,7 @@ impl<'a> Default for RenderPipelineDescriptor<'a> {
 impl RenderPipelineDescriptor<'_> {
     pub fn with_depth_stencil(mut self) -> Self {
         self.depth_stencil = Some(wgpu::DepthStencilState {
-            format: Texture::DEPTH_FORMAT,
+            format: RawTexture::DEPTH_FORMAT,
             depth_write_enabled: true,
             depth_compare: wgpu::CompareFunction::Less,
             stencil: wgpu::StencilState::default(),

@@ -15,8 +15,8 @@ impl AssetTypeLoader for TextLoader {
         &self,
         _all_storages: shipyard::AllStoragesView,
         path: &std::path::Path,
-    ) -> Self::AssetType {
-        std::fs::read_to_string(path).unwrap()
+    ) -> anyhow::Result<Self::AssetType> {
+        Ok(std::fs::read_to_string(path)?)
     }
 
     fn extensions(&self) -> &[&str] {

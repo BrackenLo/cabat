@@ -9,7 +9,7 @@ use lru::LruCache;
 use rustc_hash::FxHasher;
 use shipyard::Unique;
 
-use crate::{render_tools, texture::Texture};
+use crate::{render_tools, texture::RawTexture};
 
 //====================================================================
 
@@ -59,7 +59,7 @@ pub struct TextAtlas {
     glyphs_in_use: HashSet<CacheKey, Hasher>,
     cached_glyphs: LruCache<CacheKey, GlyphData, Hasher>,
 
-    texture: Texture,
+    texture: RawTexture,
     texture_size: Size<u32>,
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
@@ -77,7 +77,7 @@ impl TextAtlas {
         let cached_glyphs = LruCache::unbounded_with_hasher(Hasher::default());
 
         let texture_size = Size::new(DEFAULT_START_SIZE, DEFAULT_START_SIZE);
-        let texture = Texture::from_size(device, texture_size, Some("Text Atlas Texture"), None);
+        let texture = RawTexture::from_size(device, texture_size, Some("Text Atlas Texture"), None);
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Text Atlas Bind Group Layout"),

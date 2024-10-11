@@ -11,7 +11,7 @@ use crate::{asset_storage::AssetLoadError, Asset};
 pub trait AssetTypeLoader: 'static + Send + Sync {
     type AssetType: Asset;
 
-    fn load(&self, all_storages: AllStoragesView, path: &Path) -> Self::AssetType;
+    fn load(&self, all_storages: AllStoragesView, path: &Path) -> crate::Result<Self::AssetType>;
     fn extensions(&self) -> &[&str];
 
     #[inline]
@@ -43,7 +43,10 @@ where
         all_storages: AllStoragesView,
         path: &Path,
     ) -> Result<LoadedAsset, AssetLoadError> {
-        Ok(L::load(&self, all_storages, path).into())
+        match L::load(&self, all_storages, path) {
+            Ok(asset) => Ok(asset.into()),
+            Err(_) => todo!(),
+        }
     }
 
     #[inline]

@@ -3,7 +3,6 @@
 use std::{
     any::TypeId,
     collections::HashMap,
-    error::Error,
     fmt::{self, Debug, Display},
     hash::BuildHasherDefault,
     path::PathBuf,
@@ -41,16 +40,17 @@ pub enum AssetStorageError {}
 
 //--------------------------------------------------
 
-#[derive(Clone)]
+#[derive(thiserror::Error)]
 pub enum AssetLoadError {
     FileDoesNotExist(PathBuf),
     IsNotFile(PathBuf),
     InvalidExtension,
     NoLoaderForType(String, String), // Type Name, Ext
     InvalidCastType(String, String), // Type 1, Type 2
-}
 
-impl Error for AssetLoadError {}
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
 
 impl Debug for AssetLoadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -71,6 +71,7 @@ impl Debug for AssetLoadError {
                 "Cannot create asset of type '{:?}' from loaded type '{:?}'",
                 type_id, type_id1
             )),
+            AssetLoadError::Other(_) => todo!(),
         }
     }
 }
