@@ -148,6 +148,7 @@ impl WorkloadToBuild {
 
 //--------------------------------------------------
 
+// TODO - Add support for Asset Storage
 impl<'a> WorkloadBuilder<'a> {
     pub fn new(world: &'a shipyard::World) -> Self {
         Self {

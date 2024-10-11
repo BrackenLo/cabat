@@ -37,6 +37,15 @@ pub mod spatial {
     pub use cabat_spatial::Transform;
 }
 
+pub mod assets {
+    pub use cabat_assets::{
+        asset_loader::AssetTypeLoader,
+        asset_storage::AssetStorage,
+        handle::{Handle, HandleId, HandleInner},
+        Asset, AssetStoragePlugin,
+    };
+}
+
 //====================================================================
 
 pub struct DefaultPlugins;
@@ -48,6 +57,7 @@ impl Plugin for DefaultPlugins {
     ) -> cabat_shipyard::WorkloadBuilder {
         workload_builder
             .add_plugin(runner::ToolsPlugin)
+            .add_plugin(assets::AssetStoragePlugin)
             .add_plugin(renderer::FullRendererPlugin)
     }
 }
