@@ -51,14 +51,11 @@ pub mod assets {
 pub struct DefaultPlugins;
 
 impl Plugin for DefaultPlugins {
-    fn build(
-        self,
-        workload_builder: cabat_shipyard::WorkloadBuilder,
-    ) -> cabat_shipyard::WorkloadBuilder {
+    fn build(self, workload_builder: &cabat_shipyard::WorkloadBuilder) {
         workload_builder
             .add_plugin(runner::ToolsPlugin)
             .add_plugin(assets::AssetStoragePlugin)
-            .add_plugin(renderer::FullRendererPlugin)
+            .add_plugin(renderer::FullRendererPlugin);
     }
 }
 

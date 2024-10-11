@@ -38,7 +38,7 @@ fn main() {
                 Stages::Update,
                 (sys_update_camera, sys_move_camera, sys_rotate_point),
             )
-            .add_event::<WindowResizeEvent>((sys_resize_camera).into_workload())
+            .add_event::<WindowResizeEvent>((sys_resize_camera).into_workload());
     });
 }
 

@@ -20,7 +20,7 @@ fn main() {
     Runner::run(|builder| {
         builder
             .add_plugin(DefaultPlugins)
-            .add_workload(Stages::Setup, sys_load_stuff)
+            .add_workload(Stages::Setup, sys_load_stuff);
     });
 }
 

@@ -28,11 +28,11 @@ pub mod crates {
 pub struct FullRendererPlugin;
 
 impl Plugin for FullRendererPlugin {
-    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+    fn build(self, builder: &WorkloadBuilder) {
         builder
             .add_plugin(CoreRendererPlugin)
             .add_plugin(plugins::Text2dPlugin)
-            .add_plugin(plugins::Text3dPlugin)
+            .add_plugin(plugins::Text3dPlugin);
     }
 }
 
@@ -41,7 +41,7 @@ impl Plugin for FullRendererPlugin {
 pub struct CoreRendererPlugin;
 
 impl Plugin for CoreRendererPlugin {
-    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+    fn build(self, builder: &WorkloadBuilder) {
         builder
             .add_workload_first(
                 Stages::Setup,
@@ -68,7 +68,7 @@ impl Plugin for CoreRendererPlugin {
                     texture::sys_resize_depth_texture.skip_if_missing_unique::<DepthTexture>(),
                 )
                     .into_workload(),
-            )
+            );
     }
 }
 

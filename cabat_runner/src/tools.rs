@@ -19,7 +19,7 @@ pub use winit::{event::MouseButton, keyboard::KeyCode};
 pub struct ToolsPlugin;
 
 impl Plugin for ToolsPlugin {
-    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+    fn build(self, builder: &WorkloadBuilder) {
         builder
             .add_workload(Stages::Setup, sys_setup_uniques)
             .add_workload(Stages::First, sys_update_time)
@@ -30,7 +30,7 @@ impl Plugin for ToolsPlugin {
                     sys_reset_input::<MouseButton>,
                     sys_reset_mouse_input,
                 ),
-            )
+            );
     }
 }
 

@@ -20,7 +20,7 @@ use super::{sys_setup_text_components, TextFontSystem, TextSwashCache};
 pub struct Text2dPlugin;
 
 impl Plugin for Text2dPlugin {
-    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+    fn build(self, builder: &WorkloadBuilder) {
         builder
             .add_workload_first(
                 Stages::Setup,
@@ -36,7 +36,7 @@ impl Plugin for Text2dPlugin {
                     .after_all(crate::sys_finish_main_render_pass),
             )
             .add_workload(Stages::Last, sys_trim_text_pipeline)
-            .add_event::<WindowResizeEvent>((sys_resize_text_pipeline).into_workload())
+            .add_event::<WindowResizeEvent>((sys_resize_text_pipeline).into_workload());
     }
 }
 

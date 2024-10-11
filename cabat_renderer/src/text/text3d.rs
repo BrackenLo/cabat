@@ -21,7 +21,7 @@ use super::{atlas::TextAtlas, sys_setup_text_components, TextFontSystem, TextSwa
 pub struct Text3dPlugin;
 
 impl Plugin for Text3dPlugin {
-    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder {
+    fn build(self, builder: &WorkloadBuilder) {
         builder
             .add_workload_first(
                 Stages::Setup,
@@ -34,7 +34,7 @@ impl Plugin for Text3dPlugin {
                 Stages::Render,
                 sys_render_text.skip_if_missing_unique::<RenderPass>(),
             )
-            .add_workload(Stages::Last, sys_trim_atlas)
+            .add_workload(Stages::Last, sys_trim_atlas);
     }
 }
 

@@ -6,7 +6,9 @@ use cabat_runner::Runner;
 //====================================================================
 
 fn main() {
-    Runner::run(|builder| builder.add_plugin(DefaultPlugins));
+    Runner::run(|builder| {
+        builder.add_plugin(DefaultPlugins);
+    });
 }
 
 //====================================================================

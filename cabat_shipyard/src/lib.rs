@@ -1,11 +1,12 @@
 //====================================================================
 
 use std::{
+    cell::RefCell,
     collections::HashMap,
     ops::{Deref, DerefMut},
 };
 
-use shipyard::{info::TypeId, IntoWorkload, Unique, WorkloadModificator};
+use shipyard::{info::TypeId, IntoWorkload, Unique, UniqueView, WorkloadModificator};
 
 //====================================================================
 
@@ -20,9 +21,14 @@ pub type ResMut<'a, T> = shipyard::UniqueViewMut<'a, T>;
 
 //====================================================================
 
+pub trait GetWorld {
+    fn get_world(&self) -> &shipyard::World;
+}
+
 #[allow(dead_code)]
 pub trait WorldTools {
     fn and_run<B, S: shipyard::System<(), B>>(&self, system: S) -> &Self;
+
     fn and_run_with_data<Data, B, S: shipyard::System<(Data,), B>>(
         &self,
         system: S,
@@ -30,10 +36,32 @@ pub trait WorldTools {
     ) -> &Self;
 }
 
-impl WorldTools for shipyard::World {
+#[allow(dead_code)]
+pub trait UniqueTools {
+    fn insert<U: shipyard::Unique + Send + Sync>(&self, unique: U) -> &Self;
+    fn insert_default<U: shipyard::Unique + Send + Sync + Default>(&self) -> &Self {
+        self.insert(U::default())
+    }
+
+    fn get_or_insert<U, F>(&self, insert: F) -> UniqueView<'_, U>
+    where
+        U: shipyard::Unique + Send + Sync,
+        F: Fn() -> U;
+}
+
+//--------------------------------------------------
+
+impl GetWorld for shipyard::World {
+    #[inline]
+    fn get_world(&self) -> &shipyard::World {
+        &self
+    }
+}
+
+impl<T: GetWorld> WorldTools for T {
     #[inline]
     fn and_run<B, S: shipyard::System<(), B>>(&self, system: S) -> &Self {
-        self.run(system);
+        self.get_world().run(system);
         self
     }
 
@@ -43,29 +71,38 @@ impl WorldTools for shipyard::World {
         system: S,
         data: Data,
     ) -> &Self {
-        self.run_with_data(system, data);
+        self.get_world().run_with_data(system, data);
         self
     }
 }
 
-#[allow(dead_code)]
-pub trait UniqueTools {
-    fn insert<U: shipyard::Unique + Send + Sync>(&self, unique: U) -> &Self;
-    fn replace<U: shipyard::Unique + Send + Sync>(&self, unique: U);
-}
-
-impl UniqueTools for shipyard::World {
+impl<T: GetWorld> UniqueTools for T {
     #[inline]
     fn insert<U: shipyard::Unique + Send + Sync>(&self, unique: U) -> &Self {
-        self.add_unique(unique);
+        self.get_world().add_unique(unique);
         self
     }
 
-    fn replace<U: shipyard::Unique + Send + Sync>(&self, unique: U) {
-        self.remove_unique::<U>().ok();
-        self.add_unique(unique);
+    fn get_or_insert<U, F>(&self, insert: F) -> UniqueView<'_, U>
+    where
+        U: shipyard::Unique + Send + Sync,
+        F: Fn() -> U,
+    {
+        match self.get_world().get_unique::<&U>() {
+            Ok(unique) => return unique,
+
+            Err(shipyard::error::GetStorage::MissingStorage { .. }) => {
+                // Add and return new unique
+                self.get_world().add_unique(insert());
+                return self.get_world().get_unique::<&U>().unwrap();
+            }
+
+            Err(_) => std::unimplemented!(),
+        };
     }
 }
+
+//====================================================================
 
 impl UniqueTools for shipyard::AllStoragesView<'_> {
     #[inline]
@@ -74,9 +111,22 @@ impl UniqueTools for shipyard::AllStoragesView<'_> {
         self
     }
 
-    fn replace<U: shipyard::Unique + Send + Sync>(&self, unique: U) {
-        self.remove_unique::<U>().ok();
-        self.add_unique(unique);
+    fn get_or_insert<U, F>(&self, insert: F) -> UniqueView<'_, U>
+    where
+        U: shipyard::Unique + Send + Sync,
+        F: Fn() -> U,
+    {
+        match self.get_unique::<&U>() {
+            Ok(unique) => return unique,
+
+            Err(shipyard::error::GetStorage::MissingStorage { .. }) => {
+                // Add and return new unique
+                self.add_unique(insert());
+                return self.get_unique::<&U>().unwrap();
+            }
+
+            Err(_) => std::unimplemented!(),
+        };
     }
 }
 
@@ -117,13 +167,17 @@ impl Iterator for SubStages {
 //====================================================================
 
 pub trait Plugin {
-    fn build(self, builder: WorkloadBuilder) -> WorkloadBuilder;
+    fn build(self, builder: &WorkloadBuilder);
 }
 
 //--------------------------------------------------
 
 pub struct WorkloadBuilder<'a> {
     world: &'a shipyard::World,
+    inner: RefCell<WorkloadBuilderInner>,
+}
+
+struct WorkloadBuilderInner {
     workloads: HashMap<Stages, WorkloadToBuild>,
     event_workloads: HashMap<TypeId, shipyard::Workload>,
     event_workload_names: HashMap<String, String>, // Type ID : Event name
@@ -151,21 +205,27 @@ impl WorkloadToBuild {
 // TODO - Add support for Asset Storage
 impl<'a> WorkloadBuilder<'a> {
     pub fn new(world: &'a shipyard::World) -> Self {
-        Self {
-            world,
+        let inner = WorkloadBuilderInner {
             workloads: HashMap::new(),
             event_workloads: HashMap::new(),
             event_workload_names: HashMap::new(),
 
             build_tabs: 0,
             build_text: "Setting up Workload Builder".to_string(),
+        };
+
+        Self {
+            world,
+            inner: RefCell::new(inner),
         }
     }
 
     pub fn build(self) {
-        log::trace!("{}", self.build_text);
+        let inner = self.inner.into_inner();
 
-        self.workloads.into_iter().for_each(|(_, mut to_build)| {
+        log::trace!("{}", inner.build_text);
+
+        inner.workloads.into_iter().for_each(|(_, mut to_build)| {
             enum_iterator::all::<SubStages>()
                 .into_iter()
                 .fold(to_build.main, |acc, substage| {
@@ -196,7 +256,7 @@ impl<'a> WorkloadBuilder<'a> {
             );
 
         // Process events
-        let ids = self
+        let ids = inner
             .event_workloads
             .into_iter()
             .map(|(id, workload)| {
@@ -216,7 +276,7 @@ impl<'a> WorkloadBuilder<'a> {
         let data = self.world.workloads_info().0.iter().fold(
             String::from("Building workloads. Registered Stages and functions:"),
             |acc, (name, workload_info)| {
-                let name = match self.event_workload_names.get(name) {
+                let name = match inner.event_workload_names.get(name) {
                     Some(event_name) => event_name,
                     None => name,
                 };
@@ -239,23 +299,24 @@ impl<'a> WorkloadBuilder<'a> {
 }
 
 impl<'a> WorkloadBuilder<'a> {
-    fn log(&mut self, text: String) {
-        let tabs = (0..self.build_tabs).map(|_| "\t").collect::<String>();
-        self.build_text = format!("{}\n{}⌙ {}", self.build_text, tabs, text);
-    }
+    pub fn log(&self, text: String) {
+        let mut inner = self.inner.borrow_mut();
 
-    fn add_workload_sub(
-        mut self,
-        stage: Stages,
-        substage: SubStages,
-        workload: shipyard::Workload,
-    ) -> Self {
+        let tabs = (0..inner.build_tabs).map(|_| "\t").collect::<String>();
+        inner.build_text = format!("{}\n{}⌙ {}", inner.build_text, tabs, text);
+    }
+}
+
+impl<'a> WorkloadBuilder<'a> {
+    fn add_workload_sub(&self, stage: Stages, substage: SubStages, workload: shipyard::Workload) {
         self.log(format!(
             "Adding workload for stage '{:?}' - substage {:?}",
             stage, substage
         ));
 
-        let mut old_workload = self
+        let mut inner = self.inner.borrow_mut();
+
+        let mut old_workload = inner
             .workloads
             .remove(&stage)
             .unwrap_or(WorkloadToBuild::new(stage));
@@ -267,56 +328,60 @@ impl<'a> WorkloadBuilder<'a> {
 
         old_workload.substages.insert(substage, new_substage);
 
-        self.workloads.insert(stage, old_workload);
+        inner.workloads.insert(stage, old_workload);
+    }
+
+    //--------------------------------------------------
+
+    pub fn add_workload_first<Views, R, Sys>(&self, stage: Stages, workload: Sys) -> &Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::First, workload.into_workload());
+        self
+    }
+
+    pub fn add_workload_pre<Views, R, Sys>(&self, stage: Stages, workload: Sys) -> &Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::Pre, workload.into_workload());
+        self
+    }
+
+    pub fn add_workload<Views, R, Sys>(&self, stage: Stages, workload: Sys) -> &Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::Main, workload.into_workload());
+        self
+    }
+
+    pub fn add_workload_post<Views, R, Sys>(&self, stage: Stages, workload: Sys) -> &Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::Post, workload.into_workload());
+        self
+    }
+
+    pub fn add_workload_last<Views, R, Sys>(&self, stage: Stages, workload: Sys) -> &Self
+    where
+        Sys: IntoWorkload<Views, R>,
+        R: 'static,
+    {
+        self.add_workload_sub(stage, SubStages::Last, workload.into_workload());
         self
     }
 
     //--------------------------------------------------
 
-    pub fn add_workload_first<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
-    where
-        Sys: IntoWorkload<Views, R>,
-        R: 'static,
-    {
-        self.add_workload_sub(stage, SubStages::First, workload.into_workload())
-    }
-
-    pub fn add_workload_pre<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
-    where
-        Sys: IntoWorkload<Views, R>,
-        R: 'static,
-    {
-        self.add_workload_sub(stage, SubStages::Pre, workload.into_workload())
-    }
-
-    pub fn add_workload<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
-    where
-        Sys: IntoWorkload<Views, R>,
-        R: 'static,
-    {
-        self.add_workload_sub(stage, SubStages::Main, workload.into_workload())
-    }
-
-    pub fn add_workload_post<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
-    where
-        Sys: IntoWorkload<Views, R>,
-        R: 'static,
-    {
-        self.add_workload_sub(stage, SubStages::Post, workload.into_workload())
-    }
-
-    pub fn add_workload_last<Views, R, Sys>(self, stage: Stages, workload: Sys) -> Self
-    where
-        Sys: IntoWorkload<Views, R>,
-        R: 'static,
-    {
-        self.add_workload_sub(stage, SubStages::Last, workload.into_workload())
-    }
-
-    //--------------------------------------------------
-
     // TODO - Find way to convert to use IntoWorkload
-    pub fn add_event<E: Event>(mut self, workload: shipyard::Workload) -> Self {
+    pub fn add_event<E: Event>(&self, workload: shipyard::Workload) -> &Self {
         let id = TypeId::of::<E>();
 
         self.log(format!(
@@ -324,60 +389,46 @@ impl<'a> WorkloadBuilder<'a> {
             std::any::type_name::<E>()
         ));
 
-        // Get existing workload or create new one
-        let old_workload = self
-            .event_workloads
-            .remove(&id)
-            .unwrap_or(shipyard::Workload::new(id));
+        {
+            let mut inner = self.inner.borrow_mut();
 
-        self.event_workloads
-            .insert(id, old_workload.merge(workload));
+            // Get existing workload or create new one
+            let old_workload = inner
+                .event_workloads
+                .remove(&id)
+                .unwrap_or(shipyard::Workload::new(id));
 
-        // Store event type name
-        self.event_workload_names
-            .entry(format!("{:?}", id))
-            .or_insert(std::any::type_name::<E>().to_string());
+            inner
+                .event_workloads
+                .insert(id, old_workload.merge(workload));
+
+            // Store event type name
+            inner
+                .event_workload_names
+                .entry(format!("{:?}", id))
+                .or_insert(std::any::type_name::<E>().to_string());
+        }
 
         self
     }
 
     // TODO - Add tracking to make sure plugin can't be added multiple times
-    pub fn add_plugin<T: Plugin>(mut self, plugin: T) -> Self {
+    pub fn add_plugin<T: Plugin>(&self, plugin: T) -> &Self {
         self.log(format!("Adding plugin '{}'", std::any::type_name::<T>()));
-        self.build_tabs += 1;
+        self.inner.borrow_mut().build_tabs += 1;
 
-        self = plugin.build(self);
-        self.build_tabs -= 1;
-
+        plugin.build(self);
+        self.inner.borrow_mut().build_tabs -= 1;
         self
     }
 }
 
-impl WorldTools for WorkloadBuilder<'_> {
-    fn and_run<B, S: shipyard::System<(), B>>(&self, system: S) -> &Self {
-        self.world.run(system);
-        self
-    }
+//--------------------------------------------------
 
-    fn and_run_with_data<Data, B, S: shipyard::System<(Data,), B>>(
-        &self,
-        system: S,
-        data: Data,
-    ) -> &Self {
-        self.world.run_with_data(system, data);
-        self
-    }
-}
-
-impl UniqueTools for WorkloadBuilder<'_> {
-    fn insert<U: shipyard::Unique + Send + Sync>(&self, unique: U) -> &Self {
-        self.world.add_unique(unique);
-        self
-    }
-
-    fn replace<U: shipyard::Unique + Send + Sync>(&self, unique: U) {
-        self.world.remove_unique::<U>().ok();
-        self.world.add_unique(unique);
+impl GetWorld for WorkloadBuilder<'_> {
+    #[inline]
+    fn get_world(&self) -> &shipyard::World {
+        &self.world
     }
 }
 
