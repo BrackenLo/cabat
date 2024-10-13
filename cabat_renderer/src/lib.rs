@@ -5,25 +5,21 @@ use cabat_common::{Size, WindowRaw, WindowResizeEvent, WindowSize};
 use cabat_shipyard::{prelude::*, UniqueTools};
 use loader::TextureLoader;
 use pollster::FutureExt;
-use shared::SharedPipelineResources;
+use shared::SharedRendererResources;
 use shipyard::{AllStoragesView, IntoWorkload, SystemModificator, Unique, WorkloadModificator};
 use texture::DepthTexture;
 
 pub mod camera;
 pub mod loader;
 pub mod render_tools;
+pub mod renderers;
 pub mod shared;
-pub mod text;
 pub mod texture;
-pub mod texture3d_renderer;
 
 //====================================================================
 
 pub mod plugins {
-    pub use crate::{
-        text::Text2dPlugin, text::Text3dPlugin, texture3d_renderer::Texture3dPlugin,
-        CoreRendererPlugin,
-    };
+    pub use crate::{renderers::plugins::*, CoreRendererPlugin};
 }
 
 pub mod crates {
@@ -219,7 +215,7 @@ fn sys_setup_renderer_components(all_storages: AllStoragesView, window: Res<Wind
 
 fn sys_setup_misc(all_storages: AllStoragesView, device: Res<Device>) {
     all_storages
-        .insert(SharedPipelineResources::new(device.inner()))
+        .insert(SharedRendererResources::new(device.inner()))
         .insert(ClearColor::default())
         .insert(camera::MainCamera(camera::Camera::new(
             device.inner(),

@@ -1,7 +1,7 @@
 //====================================================================
 
-use cabat::{assets::AssetStorage, DefaultPlugins};
-use cabat_renderer::{texture::Texture, texture3d_renderer::Sprite};
+use cabat::{assets::AssetStorage, renderer::texture3d::Sprite, DefaultPlugins};
+use cabat_renderer::texture::Texture;
 use cabat_runner::{tools::Time, Runner};
 use cabat_shipyard::{Res, Stages};
 use cabat_spatial::Transform;

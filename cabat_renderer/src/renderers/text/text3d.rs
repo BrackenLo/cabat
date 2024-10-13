@@ -25,7 +25,7 @@ impl Plugin for Text3dPlugin {
         builder
             .add_workload_first(
                 Stages::Setup,
-                (sys_setup_text_components, sys_setup_text_pipeline)
+                (sys_setup_text_components, sys_setup_text_renderer)
                     .into_sequential_workload()
                     .after_all("renderer_setup"),
             )
@@ -38,21 +38,21 @@ impl Plugin for Text3dPlugin {
     }
 }
 
-fn sys_setup_text_pipeline(
+fn sys_setup_text_renderer(
     all_storages: AllStoragesView,
     device: Res<Device>,
     config: Res<SurfaceConfig>,
     atlas: Res<TextAtlas>,
     camera: Res<MainCamera>,
 ) {
-    let pipeline = Text3dRenderer::new(
+    let renderer = Text3dRenderer::new(
         device.inner(),
         config.inner(),
         &atlas,
         camera.bind_group_layout(),
     );
 
-    all_storages.add_unique(pipeline);
+    all_storages.add_unique(renderer);
 }
 
 fn sys_prep_text(
@@ -182,7 +182,7 @@ impl Text3dRenderer {
                 &buffer_bind_group_layout,
             ],
             &[Text3dVertex::desc()],
-            include_str!("../../shaders/text3d.wgsl"),
+            include_str!("../shaders/text3d.wgsl"),
             render_tools::RenderPipelineDescriptor {
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleStrip,

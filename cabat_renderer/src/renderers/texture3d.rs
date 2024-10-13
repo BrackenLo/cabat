@@ -18,7 +18,7 @@ use crate::{
     camera::MainCamera,
     render_tools,
     shared::{
-        SharedPipelineResources, TextureRectVertex, TEXTURE_RECT_INDEX_COUNT, TEXTURE_RECT_INDICES,
+        SharedRendererResources, TextureRectVertex, TEXTURE_RECT_INDEX_COUNT, TEXTURE_RECT_INDICES,
         TEXTURE_RECT_VERTICES,
     },
     texture::{RawTexture, Texture},
@@ -32,21 +32,21 @@ pub struct Texture3dPlugin;
 impl Plugin for Texture3dPlugin {
     fn build(self, builder: &WorkloadBuilder) {
         builder
-            .add_workload_pre(Stages::Setup, sys_setup_texture_pipeline)
+            .add_workload_pre(Stages::Setup, sys_setup_texture_renderer)
             .add_workload_last(Stages::Update, sys_prep_texture3d)
             .add_workload(Stages::Render, sys_render_texture3d);
     }
 }
 
-fn sys_setup_texture_pipeline(
+fn sys_setup_texture_renderer(
     all_storages: AllStoragesView,
     device: Res<Device>,
     queue: Res<Queue>,
     config: Res<SurfaceConfig>,
-    shared: Res<SharedPipelineResources>,
+    shared: Res<SharedRendererResources>,
     camera: Res<MainCamera>,
 ) {
-    let pipeline = Texture3dRenderer::new(
+    let renderer = Texture3dRenderer::new(
         device.inner(),
         queue.inner(),
         config.inner(),
@@ -54,7 +54,7 @@ fn sys_setup_texture_pipeline(
         camera.bind_group_layout(),
     );
 
-    all_storages.add_unique(pipeline);
+    all_storages.add_unique(renderer);
 }
 
 fn sys_prep_texture3d(
@@ -263,7 +263,7 @@ impl Texture3dRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
-        shared: &SharedPipelineResources,
+        shared: &SharedRendererResources,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let pipeline = render_tools::create_pipeline(
@@ -272,7 +272,7 @@ impl Texture3dRenderer {
             "Texture 3d Pipeline",
             &[camera_bind_group_layout, shared.texture_bind_group_layout()],
             &[TextureRectVertex::desc(), Texture3dInstanceRaw::desc()],
-            include_str!("../shaders/texture3d.wgsl"),
+            include_str!("shaders/texture3d.wgsl"),
             render_tools::RenderPipelineDescriptor::default()
                 .with_depth_stencil()
                 .with_backface_culling(),

@@ -11,9 +11,10 @@ pub mod common {
 pub mod renderer {
     pub use cabat_renderer::{
         camera::{Camera, CameraUniform, OrthographicCamera, PerspectiveCamera},
-        crates, plugins, render_tools, shared, text, texture, texture3d_renderer, ClearColor,
-        Device, FullRendererPlugin, Queue, RenderEncoder, RenderPass, RenderPassDesc, Surface,
-        SurfaceConfig, Vertex,
+        crates, plugins, render_tools,
+        renderers::{text, texture3d},
+        shared, texture, ClearColor, Device, FullRendererPlugin, Queue, RenderEncoder, RenderPass,
+        RenderPassDesc, Surface, SurfaceConfig, Vertex,
     };
 }
 

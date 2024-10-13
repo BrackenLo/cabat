@@ -1,7 +1,10 @@
 //====================================================================
 
 use cabat::{
-    renderer::PerspectiveCamera,
+    renderer::{
+        text::{Text3dBuffer, Text3dBufferDescriptor, Text3dRenderer, TextFontSystem},
+        PerspectiveCamera,
+    },
     runner::{
         tools::{Input, KeyCode, Time},
         Runner,
@@ -9,11 +12,7 @@ use cabat::{
     DefaultPlugins,
 };
 use cabat_common::{WindowResizeEvent, WindowSize};
-use cabat_renderer::{
-    camera::MainCamera,
-    text::{Text3dBuffer, Text3dBufferDescriptor, Text3dRenderer, TextFontSystem},
-    Device, Queue,
-};
+use cabat_renderer::{camera::MainCamera, Device, Queue};
 use cabat_shipyard::{prelude::*, UniqueTools};
 use cabat_spatial::Transform;
 use glam::Vec3Swizzles;

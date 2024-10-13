@@ -12,11 +12,11 @@ use super::Vertex;
 //====================================================================
 
 #[derive(Unique)]
-pub struct SharedPipelineResources {
+pub struct SharedRendererResources {
     texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
-impl SharedPipelineResources {
+impl SharedRendererResources {
     pub fn new(device: &wgpu::Device) -> Self {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

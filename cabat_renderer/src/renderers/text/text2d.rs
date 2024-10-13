@@ -24,7 +24,7 @@ impl Plugin for Text2dPlugin {
         builder
             .add_workload_first(
                 Stages::Setup,
-                (sys_setup_text_components, sys_setup_text_pipeline)
+                (sys_setup_text_components, sys_setup_renderer)
                     .into_sequential_workload()
                     .after_all("renderer_setup"),
             )
@@ -35,8 +35,8 @@ impl Plugin for Text2dPlugin {
                     .skip_if_missing_unique::<RenderEncoder>()
                     .after_all(crate::sys_finish_main_render_pass),
             )
-            .add_workload(Stages::Last, sys_trim_text_pipeline)
-            .add_event::<WindowResizeEvent>((sys_resize_text_pipeline).into_workload());
+            .add_workload(Stages::Last, sys_trim_text_renderer)
+            .add_event::<WindowResizeEvent>((sys_resize_text_renderer).into_workload());
     }
 }
 
@@ -45,7 +45,7 @@ impl Plugin for Text2dPlugin {
 // TODO - Replace glyphon with own custom cosmic_text implementation (more inline with text3d)
 #[derive(Unique)]
 pub struct Text2dRenderer {
-    renderer: TextRenderer,
+    pipeline: TextRenderer,
     atlas: TextAtlas,
     viewport: Viewport,
 }
@@ -60,11 +60,11 @@ impl Text2dRenderer {
         let mut atlas = TextAtlas::new(device, queue, &cache, config.format);
         let viewport = Viewport::new(device, &cache);
 
-        let renderer =
+        let pipeline =
             TextRenderer::new(&mut atlas, device, wgpu::MultisampleState::default(), None);
 
         Self {
-            renderer,
+            pipeline,
             atlas,
             viewport,
         }
@@ -83,7 +83,7 @@ impl Text2dRenderer {
 
         data: Vec<TextArea>,
     ) -> Result<(), glyphon::PrepareError> {
-        self.renderer.prepare(
+        self.pipeline.prepare(
             device,
             queue,
             font_system,
@@ -95,7 +95,7 @@ impl Text2dRenderer {
     }
 
     pub fn render<'a: 'b, 'b>(&'a self, pass: &mut wgpu::RenderPass<'a>) {
-        self.renderer
+        self.pipeline
             .render(&self.atlas, &self.viewport, pass)
             .unwrap();
     }
@@ -105,30 +105,30 @@ impl Text2dRenderer {
     }
 }
 
-fn sys_setup_text_pipeline(
+fn sys_setup_renderer(
     all_storages: AllStoragesView,
     device: Res<Device>,
     queue: Res<Queue>,
     config: Res<SurfaceConfig>,
 ) {
-    let pipeline = Text2dRenderer::new(device.inner(), queue.inner(), config.inner());
-    all_storages.add_unique(pipeline);
+    let renderer = Text2dRenderer::new(device.inner(), queue.inner(), config.inner());
+    all_storages.add_unique(renderer);
 }
 
-fn sys_resize_text_pipeline(
+fn sys_resize_text_renderer(
     queue: Res<Queue>,
     size: Res<WindowSize>,
 
-    mut text_pipeline: ResMut<Text2dRenderer>,
+    mut text_renderer: ResMut<Text2dRenderer>,
 ) {
-    text_pipeline.resize(queue.inner(), size.width(), size.height());
+    text_renderer.resize(queue.inner(), size.width(), size.height());
 }
 
 fn sys_prep_text(
     device: Res<Device>,
     queue: Res<Queue>,
 
-    mut text_pipeline: ResMut<Text2dRenderer>,
+    mut text_renderer: ResMut<Text2dRenderer>,
     mut font_system: ResMut<TextFontSystem>,
     mut swash_cache: ResMut<TextSwashCache>,
     v_buffers: View<Text2dBuffer>,
@@ -146,7 +146,7 @@ fn sys_prep_text(
         })
         .collect::<Vec<_>>();
 
-    text_pipeline
+    text_renderer
         .prep(
             device.inner(),
             queue.inner(),
@@ -157,13 +157,13 @@ fn sys_prep_text(
         .unwrap();
 }
 
-fn sys_render(mut tools: ResMut<RenderEncoder>, pipeline: Res<Text2dRenderer>) {
+fn sys_render(mut tools: ResMut<RenderEncoder>, text_renderer: Res<Text2dRenderer>) {
     let mut pass = tools.begin_render_pass(RenderPassDesc::none());
-    pipeline.render(&mut pass);
+    text_renderer.render(&mut pass);
 }
 
-fn sys_trim_text_pipeline(mut text_pipeline: ResMut<Text2dRenderer>) {
-    text_pipeline.trim();
+fn sys_trim_text_renderer(mut text_renderer: ResMut<Text2dRenderer>) {
+    text_renderer.trim();
 }
 
 //====================================================================
