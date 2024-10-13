@@ -6,7 +6,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use shipyard::{info::TypeId, IntoWorkload, Unique, UniqueView, WorkloadModificator};
+use shipyard::{info::TypeId, IntoWorkload, Unique, WorkloadModificator};
 
 //====================================================================
 
@@ -43,7 +43,7 @@ pub trait UniqueTools {
         self.insert(U::default())
     }
 
-    fn get_or_insert<U, F>(&self, insert: F) -> UniqueView<'_, U>
+    fn get_or_insert<U, F>(&self, insert: F) -> ResMut<'_, U>
     where
         U: shipyard::Unique + Send + Sync,
         F: Fn() -> U;
@@ -83,18 +83,18 @@ impl<T: GetWorld> UniqueTools for T {
         self
     }
 
-    fn get_or_insert<U, F>(&self, insert: F) -> UniqueView<'_, U>
+    fn get_or_insert<U, F>(&self, insert: F) -> ResMut<'_, U>
     where
         U: shipyard::Unique + Send + Sync,
         F: Fn() -> U,
     {
-        match self.get_world().get_unique::<&U>() {
+        match self.get_world().get_unique::<&mut U>() {
             Ok(unique) => return unique,
 
             Err(shipyard::error::GetStorage::MissingStorage { .. }) => {
                 // Add and return new unique
                 self.get_world().add_unique(insert());
-                return self.get_world().get_unique::<&U>().unwrap();
+                return self.get_world().get_unique::<&mut U>().unwrap();
             }
 
             Err(_) => std::unimplemented!(),
@@ -111,18 +111,18 @@ impl UniqueTools for shipyard::AllStoragesView<'_> {
         self
     }
 
-    fn get_or_insert<U, F>(&self, insert: F) -> UniqueView<'_, U>
+    fn get_or_insert<U, F>(&self, insert: F) -> ResMut<'_, U>
     where
         U: shipyard::Unique + Send + Sync,
         F: Fn() -> U,
     {
-        match self.get_unique::<&U>() {
+        match self.get_unique::<&mut U>() {
             Ok(unique) => return unique,
 
             Err(shipyard::error::GetStorage::MissingStorage { .. }) => {
                 // Add and return new unique
                 self.add_unique(insert());
-                return self.get_unique::<&U>().unwrap();
+                return self.get_unique::<&mut U>().unwrap();
             }
 
             Err(_) => std::unimplemented!(),

@@ -66,7 +66,7 @@ fn sys_prep_texture3d(
 ) {
     #[derive(PartialEq, Eq, Hash)]
     enum InstanceType {
-        Texture(HandleId),
+        Texture(HandleId<Texture>),
         Default,
     }
 
@@ -154,7 +154,7 @@ fn sys_render_texture3d(
     renderer: Res<Texture3dRenderer>,
     camera: Res<MainCamera>,
 
-    storage: Res<AssetStorage>,
+    storage: Res<AssetStorage<Texture>>,
 ) {
     let use_default = match renderer.default_instances.instance_count != 0 {
         true => Some((
@@ -253,7 +253,7 @@ pub struct Texture3dRenderer {
     index_buffer: wgpu::Buffer,
     index_count: u32,
 
-    instances: HashMap<HandleId, Texture3dInstance, BuildHasherDefault<FxHasher>>,
+    instances: HashMap<HandleId<Texture>, Texture3dInstance, BuildHasherDefault<FxHasher>>,
     default_texture_bind_group: wgpu::BindGroup,
     default_instances: Texture3dInstance,
 }
@@ -340,8 +340,8 @@ impl Texture3dRenderer {
         &self,
         pass: &mut wgpu::RenderPass,
         camera_bind_group: &wgpu::BindGroup,
-        instances: &[(Option<HandleId>, &wgpu::Buffer, u32)],
-        storage: &AssetStorage,
+        instances: &[(Option<HandleId<Texture>>, &wgpu::Buffer, u32)],
+        storage: &AssetStorage<Texture>,
     ) {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, camera_bind_group, &[]);
@@ -349,12 +349,14 @@ impl Texture3dRenderer {
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
+        let storage = storage.get_storage();
+
         instances.into_iter().for_each(|instance| {
             pass.set_vertex_buffer(1, instance.1.slice(..));
 
             match instance.0 {
                 Some(id) => {
-                    let texture = storage.get_asset::<Texture>(id).unwrap();
+                    let texture = storage.get(&id).unwrap();
                     pass.set_bind_group(1, texture.binding(), &[]);
                 }
                 None => pass.set_bind_group(1, &self.default_texture_bind_group, &[]),

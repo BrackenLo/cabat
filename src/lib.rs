@@ -39,7 +39,7 @@ pub mod spatial {
 
 pub mod assets {
     pub use cabat_assets::{
-        asset_loader::AssetTypeLoader,
+        asset_loader::AssetLoader,
         asset_storage::AssetStorage,
         handle::{Handle, HandleId},
         Asset, AssetStoragePlugin,

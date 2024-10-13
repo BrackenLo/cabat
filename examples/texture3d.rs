@@ -1,9 +1,9 @@
 //====================================================================
 
 use cabat::{assets::AssetStorage, DefaultPlugins};
-use cabat_renderer::texture3d_renderer::Sprite;
+use cabat_renderer::{texture::Texture, texture3d_renderer::Sprite};
 use cabat_runner::{tools::Time, Runner};
-use cabat_shipyard::{Res, ResMut, Stages};
+use cabat_shipyard::{Res, Stages};
 use cabat_spatial::Transform;
 use shipyard::{AllStoragesView, Component, EntitiesViewMut, IntoIter, ViewMut};
 
@@ -35,7 +35,7 @@ struct Spin {
 
 fn sys_spawn_entities(
     all_storages: AllStoragesView,
-    mut assets: ResMut<AssetStorage>,
+    assets: Res<AssetStorage<Texture>>,
 
     mut entities: EntitiesViewMut,
     mut vm_sprites: ViewMut<Sprite>,

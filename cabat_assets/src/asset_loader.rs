@@ -1,80 +1,41 @@
 //====================================================================
 
-use std::{any::Any, path::Path};
+use std::path::Path;
 
+use cabat_shipyard::{GetWorld, UniqueTools};
 use shipyard::AllStoragesView;
 
-use crate::{asset_storage::AssetLoadError, Asset};
+use crate::{
+    asset_storage::{AssetManager, AssetStorage},
+    Asset,
+};
 
 //====================================================================
 
-pub trait AssetTypeLoader: 'static + Send + Sync {
-    type AssetType: Asset;
-
-    fn load(&self, all_storages: AllStoragesView, path: &Path) -> crate::Result<Self::AssetType>;
+pub trait AssetLoader<A: Asset>: 'static + Send + Sync {
+    fn load_path(&self, all_storages: AllStoragesView, path: &Path) -> crate::Result<A>;
     fn extensions(&self) -> &[&str];
 
-    #[inline]
-    fn type_name(&self) -> &str {
-        std::any::type_name::<Self::AssetType>()
-    }
+    // fn load_bytes(&self, all_storages: AllStoragesView, bytes: &[u8]) -> crate::Result<A>;
 }
 
 //====================================================================
 
-pub trait AssetLoaderOuter: 'static + Send + Sync {
-    fn load(
-        &self,
-        all_storages: AllStoragesView,
-        path: &Path,
-    ) -> Result<LoadedAsset, AssetLoadError>;
-    fn extensions(&self) -> &[&str];
-
-    fn type_name(&self) -> &str;
+pub trait RegisterAssetLoader {
+    fn register_loader<A: Asset>(&self, loader: impl AssetLoader<A>) -> &Self;
 }
 
-impl<L> AssetLoaderOuter for L
-where
-    L: AssetTypeLoader + 'static + Send + Sync,
-{
-    #[inline]
-    fn load(
-        &self,
-        all_storages: AllStoragesView,
-        path: &Path,
-    ) -> Result<LoadedAsset, AssetLoadError> {
-        match L::load(&self, all_storages, path) {
-            Ok(asset) => Ok(asset.into()),
-            Err(_) => todo!(),
-        }
-    }
+impl<T: GetWorld> RegisterAssetLoader for T {
+    fn register_loader<A: Asset>(&self, loader: impl AssetLoader<A>) -> &Self {
+        let mut manager = self.get_world().get_or_insert(|| AssetManager::new());
+        let mut storage = self.get_world().get_or_insert(|| AssetStorage::<A>::new());
 
-    #[inline]
-    fn extensions(&self) -> &[&str] {
-        L::extensions(&self)
-    }
+        let result = manager.register_storage(&storage);
+        result.unwrap();
 
-    #[inline]
-    fn type_name(&self) -> &str {
-        L::type_name(self)
-    }
-}
+        storage.register_loader(loader);
 
-//====================================================================
-
-pub struct LoadedAsset {
-    // pub(crate) type_id: TypeId,
-    pub(crate) type_name: String,
-    pub(crate) data: Box<dyn Any + Send + Sync>,
-}
-
-impl<A: Asset> From<A> for LoadedAsset {
-    fn from(value: A) -> Self {
-        Self {
-            // type_id: std::any::TypeId::of::<A>(),
-            type_name: std::any::type_name::<A>().to_string(),
-            data: Box::new(value),
-        }
+        self
     }
 }
 
