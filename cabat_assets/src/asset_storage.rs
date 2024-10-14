@@ -164,6 +164,8 @@ impl<A: Asset> AssetStorageAccess for Arc<RwLock<AssetStorageInner<A>>> {
 
 //====================================================================
 
+// TODO - ID lookup with file path or label of some kind
+//      - to skip loading / retreive already loaded assets
 pub struct AssetStorageInner<A: Asset> {
     sender: Sender<A>,
     receiver: Receiver<A>,
@@ -224,6 +226,24 @@ impl<A: Asset> AssetStorageInner<A> {
     }
 }
 
+impl<A: Asset> AssetStorageInner<A> {
+    fn insert_asset(&mut self, asset: A) -> Handle<A> {
+        let asset = Arc::new(asset);
+        let id = self.current_id.get_next();
+
+        self.loaded_assets.insert(id, asset.clone());
+        self.handle_count.insert(id, 0);
+
+        log::trace!(
+            "Creating new handle '{} - {}'",
+            std::any::type_name::<A>(),
+            id
+        );
+
+        Handle::new(id, self.sender.clone(), asset)
+    }
+}
+
 //--------------------------------------------------
 
 #[derive(Unique)]
@@ -234,7 +254,7 @@ pub struct AssetStorage<A: Asset> {
 //--------------------------------------------------
 
 impl<A: Asset> AssetStorage<A> {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let (sender, receiver) = crossbeam::channel::unbounded();
 
         Self {
@@ -279,9 +299,16 @@ impl<A: Asset> AssetStorage<A> {
         RwLockReadGuard::map(self.inner.read(), |inner| &inner.loaded_assets)
     }
 
+    pub fn insert_asset(&self, asset: A) -> Handle<A> {
+        log::trace!("Inserting asset of type '{}'", std::any::type_name::<A>());
+
+        let mut inner = self.inner.write();
+        inner.insert_asset(asset)
+    }
+
     pub fn load_file(
         &self,
-        all_storages: AllStoragesView,
+        all_storages: &AllStoragesView,
         path: impl Into<PathBuf>,
     ) -> crate::Result<Handle<A>> {
         let load_options = all_storages.borrow::<Res<AssetLoadOptions>>().unwrap();
@@ -314,25 +341,19 @@ impl<A: Asset> AssetStorage<A> {
         //--------------------------------------------------
         // Load asset
 
+        let asset = {
+            let inner = self.inner.read();
+            let loader = inner
+                .asset_loaders
+                .iter()
+                .find(|loader| loader.extensions().contains(&ext))
+                .ok_or(AssetLoadError::NoLoaderForExtension(ext.into()))?;
+
+            loader.load_path(all_storages, path.as_path())?
+        };
+
         let mut inner = self.inner.write();
-
-        let loader = inner
-            .asset_loaders
-            .iter()
-            .find(|loader| loader.extensions().contains(&ext))
-            .ok_or(AssetLoadError::NoLoaderForExtension(ext.into()))?;
-
-        let loaded_asset = loader.load_path(all_storages, path.as_path())?;
-
-        let asset = Arc::new(loaded_asset);
-        let id = inner.current_id.get_next();
-
-        inner.loaded_assets.insert(id, asset.clone());
-        inner.handle_count.insert(id, 0);
-
-        let handle = Handle::new(id, inner.sender.clone(), asset);
-
-        Ok(handle)
+        Ok(inner.insert_asset(asset))
 
         //--------------------------------------------------
     }

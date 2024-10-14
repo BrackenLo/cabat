@@ -1,9 +1,9 @@
 //====================================================================
 
 use cabat::{assets::AssetStorage, renderer::texture3d::Sprite, DefaultPlugins};
-use cabat_renderer::texture::Texture;
+use cabat_renderer::{shared::DefaultRendererAssets, texture::Texture};
 use cabat_runner::{tools::Time, Runner};
-use cabat_shipyard::{Res, Stages};
+use cabat_shipyard::{Res, ResMut, Stages};
 use cabat_spatial::Transform;
 use shipyard::{AllStoragesView, Component, EntitiesViewMut, IntoIter, ViewMut};
 
@@ -35,6 +35,7 @@ struct Spin {
 
 fn sys_spawn_entities(
     all_storages: AllStoragesView,
+    mut default_assets: ResMut<DefaultRendererAssets>,
     assets: Res<AssetStorage<Texture>>,
 
     mut entities: EntitiesViewMut,
@@ -42,13 +43,15 @@ fn sys_spawn_entities(
     mut vm_transform: ViewMut<Transform>,
     mut vm_spin: ViewMut<Spin>,
 ) {
-    let handle = assets.load_file(all_storages, "yay.jpg").unwrap();
+    default_assets.load_default_texture(&all_storages);
+    let default_handle = default_assets.get_texture().unwrap();
+    let loaded_handle = assets.load_file(&all_storages, "yay.jpg").unwrap();
 
     entities.add_entity(
         (&mut vm_sprites, &mut vm_transform, &mut vm_spin),
         (
             Sprite {
-                texture: None,
+                texture: default_handle,
                 width: 40.,
                 height: 40.,
                 color: [1., 0., 0., 1.],
@@ -62,7 +65,7 @@ fn sys_spawn_entities(
         (&mut vm_sprites, &mut vm_transform, &mut vm_spin),
         (
             Sprite {
-                texture: Some(handle),
+                texture: loaded_handle,
                 width: 20.,
                 height: 20.,
                 color: [1., 1., 1., 1.],

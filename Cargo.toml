@@ -9,9 +9,9 @@ members = [
   "cabat_common",
   "cabat_proc",
   "cabat_renderer",
-  "cabat_runner", 
+  "cabat_runner",
   "cabat_shipyard",
-  "cabat_spatial", 
+  "cabat_spatial",
 ]
 
 [workspace.dependencies]

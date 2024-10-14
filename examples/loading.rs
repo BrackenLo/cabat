@@ -31,7 +31,7 @@ fn main() {
 fn sys_load_stuff(storages: AllStoragesView, asset_storage: Res<AssetStorage<MyString>>) {
     let path = PathBuf::new().join("ipsum.txt");
 
-    let data = asset_storage.load_file(storages, &path).unwrap();
+    let data = asset_storage.load_file(&storages, &path).unwrap();
 
     println!("{:?}", data);
 }
@@ -48,7 +48,7 @@ pub struct TextLoader;
 impl AssetLoader<MyString> for TextLoader {
     fn load_path(
         &self,
-        _all_storages: AllStoragesView,
+        _all_storages: &AllStoragesView,
         path: &std::path::Path,
     ) -> cabat_assets::Result<MyString> {
         Ok(MyString(std::fs::read_to_string(path)?))

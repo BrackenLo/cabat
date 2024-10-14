@@ -5,7 +5,7 @@ use cabat_common::{Size, WindowRaw, WindowResizeEvent, WindowSize};
 use cabat_shipyard::{prelude::*, UniqueTools};
 use loader::TextureLoader;
 use pollster::FutureExt;
-use shared::SharedRendererResources;
+use shared::{DefaultRendererAssets, SharedRendererResources};
 use shipyard::{AllStoragesView, IntoWorkload, SystemModificator, Unique, WorkloadModificator};
 use texture::DepthTexture;
 
@@ -220,7 +220,8 @@ fn sys_setup_misc(all_storages: AllStoragesView, device: Res<Device>) {
         .insert(camera::MainCamera(camera::Camera::new(
             device.inner(),
             &camera::PerspectiveCamera::default(),
-        )));
+        )))
+        .insert(DefaultRendererAssets::default());
 }
 
 //====================================================================

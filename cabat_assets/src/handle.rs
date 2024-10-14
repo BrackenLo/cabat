@@ -85,12 +85,6 @@ pub struct Handle<A: Asset> {
 
 impl<A: Asset> Handle<A> {
     pub(crate) fn new(id: HandleId<A>, sender: Sender<A>, asset: Data<A>) -> Self {
-        log::trace!(
-            "Creating new handle '{} - {}'",
-            std::any::type_name::<A>(),
-            id
-        );
-
         sender.send(ReferenceCountSignal::Increase(id)).unwrap();
 
         Self { id, sender, asset }
@@ -110,6 +104,11 @@ impl<A: Asset> Handle<A> {
 impl<A: Asset> Clone for Handle<A> {
     #[inline]
     fn clone(&self) -> Self {
+        log::trace!(
+            "Cloning handle '{} - {}'",
+            std::any::type_name::<A>(),
+            self.id
+        );
         Self::new(self.id, self.sender.clone(), self.asset.clone())
     }
 }

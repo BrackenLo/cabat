@@ -1,10 +1,13 @@
 //====================================================================
 
-use shipyard::Unique;
+use cabat_assets::{asset_storage::AssetStorage, handle::Handle};
+use cabat_shipyard::Res;
+use shipyard::{AllStoragesView, Unique};
 
 use crate::{
     render_tools,
     texture::{RawTexture, Texture},
+    Device, Queue,
 };
 
 use super::Vertex;
@@ -67,6 +70,64 @@ impl SharedRendererResources {
     ) -> Texture {
         let bind_group = self.create_bind_group(device, &texture, label);
         Texture::new(texture, bind_group)
+    }
+}
+
+//====================================================================
+
+#[derive(Unique, Default)]
+pub struct DefaultRendererAssets {
+    texture: Option<Handle<Texture>>,
+}
+
+impl DefaultRendererAssets {
+    pub fn get_texture(&self) -> Option<Handle<Texture>> {
+        match &self.texture {
+            Some(texture) => Some(texture.clone()),
+            None => None,
+        }
+    }
+}
+
+impl DefaultRendererAssets {
+    pub fn load_default_texture(&mut self, all_storages: &AllStoragesView) {
+        match self.texture {
+            Some(_) => return,
+
+            None => {
+                let (device, queue, shared) = all_storages
+                    .borrow::<(Res<Device>, Res<Queue>, Res<SharedRendererResources>)>()
+                    .unwrap();
+
+                let raw_texture = RawTexture::from_color(
+                    device.inner(),
+                    queue.inner(),
+                    [255, 255, 255],
+                    Some("Default Texture"),
+                    None,
+                );
+
+                let default_texture =
+                    shared.load_texture(device.inner(), raw_texture, Some("Default Texture"));
+
+                let handle = {
+                    match all_storages.get_unique::<&AssetStorage<Texture>>() {
+                        Ok(storage) => storage.insert_asset(default_texture),
+
+                        Err(shipyard::error::GetStorage::MissingStorage { .. }) => {
+                            let storage = AssetStorage::<Texture>::new();
+                            let handle = storage.insert_asset(default_texture);
+                            all_storages.add_unique(storage);
+                            handle
+                        }
+
+                        Err(e) => panic!("{}", e),
+                    }
+                };
+
+                self.texture = Some(handle);
+            }
+        }
     }
 }
 

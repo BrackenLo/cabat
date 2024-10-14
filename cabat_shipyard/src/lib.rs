@@ -125,7 +125,7 @@ impl UniqueTools for shipyard::AllStoragesView<'_> {
                 return self.get_unique::<&mut U>().unwrap();
             }
 
-            Err(_) => std::unimplemented!(),
+            Err(e) => panic!("{}", e),
         };
     }
 }

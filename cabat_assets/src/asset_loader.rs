@@ -13,7 +13,7 @@ use crate::{
 //====================================================================
 
 pub trait AssetLoader<A: Asset>: 'static + Send + Sync {
-    fn load_path(&self, all_storages: AllStoragesView, path: &Path) -> crate::Result<A>;
+    fn load_path(&self, all_storages: &AllStoragesView, path: &Path) -> crate::Result<A>;
     fn extensions(&self) -> &[&str];
 
     // fn load_bytes(&self, all_storages: AllStoragesView, bytes: &[u8]) -> crate::Result<A>;

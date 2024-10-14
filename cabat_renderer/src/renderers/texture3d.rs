@@ -21,7 +21,7 @@ use crate::{
         SharedRendererResources, TextureRectVertex, TEXTURE_RECT_INDEX_COUNT, TEXTURE_RECT_INDICES,
         TEXTURE_RECT_VERTICES,
     },
-    texture::{RawTexture, Texture},
+    texture::Texture,
     Device, Queue, RenderPass, SurfaceConfig, Vertex,
 };
 
@@ -41,14 +41,12 @@ impl Plugin for Texture3dPlugin {
 fn sys_setup_texture_renderer(
     all_storages: AllStoragesView,
     device: Res<Device>,
-    queue: Res<Queue>,
     config: Res<SurfaceConfig>,
     shared: Res<SharedRendererResources>,
     camera: Res<MainCamera>,
 ) {
     let renderer = Texture3dRenderer::new(
         device.inner(),
-        queue.inner(),
         config.inner(),
         &shared,
         camera.bind_group_layout(),
@@ -64,12 +62,6 @@ fn sys_prep_texture3d(
     v_sprite: View<Sprite>,
     v_transform: View<Transform>,
 ) {
-    #[derive(PartialEq, Eq, Hash)]
-    enum InstanceType {
-        Texture(HandleId<Texture>),
-        Default,
-    }
-
     let instances =
         (&v_transform, &v_sprite)
             .iter()
@@ -80,12 +72,7 @@ fn sys_prep_texture3d(
                     color: sprite.color,
                 };
 
-                let instance_type = match &sprite.texture {
-                    Some(texture) => InstanceType::Texture(texture.id()),
-                    None => InstanceType::Default,
-                };
-
-                acc.entry(instance_type)
+                acc.entry(sprite.texture.id())
                     .or_insert(Vec::new())
                     .push(instance);
 
@@ -98,55 +85,28 @@ fn sys_prep_texture3d(
         .map(|id| *id)
         .collect::<HashSet<_>>();
 
-    let mut default_used = false;
-
     instances.into_iter().for_each(|(id, raw)| {
-        match id {
-            InstanceType::Texture(handle_id) => {
-                previous.remove(&handle_id);
+        previous.remove(&id);
 
-                renderer
-                    .instances
-                    .entry(handle_id)
-                    .and_modify(|instance| {
-                        instance.update(device.inner(), queue.inner(), raw.as_slice());
-                    })
-                    .or_insert(Texture3dInstance {
-                        instance_buffer: render_tools::create_instance_buffer(
-                            device.inner(),
-                            "Texture 3d",
-                            raw.as_slice(),
-                        ),
-                        instance_count: raw.len() as u32,
-                    });
-            }
-
-            InstanceType::Default => {
-                default_used = true;
-
-                renderer
-                    .default_instances
-                    .update(device.inner(), queue.inner(), raw.as_slice());
-            }
-        };
+        renderer
+            .instances
+            .entry(id)
+            .and_modify(|instance| {
+                instance.update(device.inner(), queue.inner(), raw.as_slice());
+            })
+            .or_insert(Texture3dInstance {
+                instance_buffer: render_tools::create_instance_buffer(
+                    device.inner(),
+                    "Texture 3d",
+                    raw.as_slice(),
+                ),
+                instance_count: raw.len() as u32,
+            });
     });
 
     previous.into_iter().for_each(|to_remove| {
         renderer.instances.remove(&to_remove);
     });
-
-    // Reset default instances if not in use
-    if !default_used && renderer.default_instances.instance_count != 0 {
-        renderer.default_instances.instance_buffer =
-            device.inner().create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Default Texture 3d Instance Buffer"),
-                size: 0,
-                usage: wgpu::BufferUsages::VERTEX,
-                mapped_at_creation: false,
-            });
-
-        renderer.default_instances.instance_count = 0;
-    }
 }
 
 fn sys_render_texture3d(
@@ -156,26 +116,10 @@ fn sys_render_texture3d(
 
     storage: Res<AssetStorage<Texture>>,
 ) {
-    let use_default = match renderer.default_instances.instance_count != 0 {
-        true => Some((
-            None,
-            &renderer.default_instances.instance_buffer,
-            renderer.default_instances.instance_count,
-        )),
-        false => None,
-    };
-
     let instances = renderer
         .instances
         .iter()
-        .map(|(id, instance)| {
-            (
-                Some(*id),
-                &instance.instance_buffer,
-                instance.instance_count,
-            )
-        })
-        .chain(use_default)
+        .map(|(id, instance)| (*id, &instance.instance_buffer, instance.instance_count))
         .collect::<Vec<_>>();
 
     renderer.render_storage(
@@ -190,7 +134,7 @@ fn sys_render_texture3d(
 
 #[derive(Component)]
 pub struct Sprite {
-    pub texture: Option<Handle<Texture>>,
+    pub texture: Handle<Texture>,
     pub width: f32,
     pub height: f32,
     pub color: [f32; 4],
@@ -254,14 +198,11 @@ pub struct Texture3dRenderer {
     index_count: u32,
 
     instances: HashMap<HandleId<Texture>, Texture3dInstance, BuildHasherDefault<FxHasher>>,
-    default_texture_bind_group: wgpu::BindGroup,
-    default_instances: Texture3dInstance,
 }
 
 impl Texture3dRenderer {
     pub fn new(
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
         shared: &SharedRendererResources,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
@@ -287,20 +228,6 @@ impl Texture3dRenderer {
 
         let instances = HashMap::default();
 
-        let default_texture = RawTexture::from_color(device, queue, [255, 255, 255], None, None);
-        let default_texture_bind_group =
-            shared.create_bind_group(device, &default_texture, Some("Default Texture"));
-
-        let default_instances = Texture3dInstance {
-            instance_buffer: device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Default Texture 3d Instance Buffer"),
-                size: 0,
-                usage: wgpu::BufferUsages::VERTEX,
-                mapped_at_creation: false,
-            }),
-            instance_count: 0,
-        };
-
         //--------------------------------------------------
 
         Self {
@@ -311,8 +238,6 @@ impl Texture3dRenderer {
             index_count,
 
             instances,
-            default_texture_bind_group,
-            default_instances,
         }
     }
 
@@ -340,7 +265,7 @@ impl Texture3dRenderer {
         &self,
         pass: &mut wgpu::RenderPass,
         camera_bind_group: &wgpu::BindGroup,
-        instances: &[(Option<HandleId<Texture>>, &wgpu::Buffer, u32)],
+        instances: &[(HandleId<Texture>, &wgpu::Buffer, u32)],
         storage: &AssetStorage<Texture>,
     ) {
         pass.set_pipeline(&self.pipeline);
@@ -354,13 +279,8 @@ impl Texture3dRenderer {
         instances.into_iter().for_each(|instance| {
             pass.set_vertex_buffer(1, instance.1.slice(..));
 
-            match instance.0 {
-                Some(id) => {
-                    let texture = storage.get(&id).unwrap();
-                    pass.set_bind_group(1, texture.binding(), &[]);
-                }
-                None => pass.set_bind_group(1, &self.default_texture_bind_group, &[]),
-            }
+            let texture = storage.get(&instance.0).unwrap();
+            pass.set_bind_group(1, texture.binding(), &[]);
 
             pass.draw_indexed(0..self.index_count, 0, 0..instance.2);
         });
