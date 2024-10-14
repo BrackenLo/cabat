@@ -105,7 +105,7 @@ impl DefaultRendererAssets {
             return;
         }
 
-        log::trace!("Loading default Texture");
+        log::info!("Loading default Texture");
 
         let (device, queue, shared) = all_storages
             .borrow::<(Res<Device>, Res<Queue>, Res<SharedRendererResources>)>()
@@ -148,7 +148,7 @@ impl DefaultRendererAssets {
             return;
         }
 
-        log::trace!("Loading default cube model");
+        log::info!("Loading default cube model");
 
         let device = all_storages.borrow::<Res<Device>>().unwrap();
 

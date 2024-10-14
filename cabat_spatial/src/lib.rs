@@ -110,6 +110,11 @@ impl Transform {
         glam::Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
             .to_cols_array()
     }
+
+    #[inline]
+    pub fn to_normal_matrix_array(&self) -> [f32; 9] {
+        glam::Mat3::from_quat(self.rotation).to_cols_array()
+    }
 }
 
 //--------------------------------------------------

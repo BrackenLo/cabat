@@ -10,6 +10,7 @@ use shipyard::{AllStoragesView, IntoWorkload, SystemModificator, Unique, Workloa
 use texture::DepthTexture;
 
 pub mod camera;
+pub mod lighting;
 pub mod loader;
 pub mod render_tools;
 pub mod renderers;

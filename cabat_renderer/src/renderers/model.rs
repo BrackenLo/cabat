@@ -13,11 +13,15 @@ use cabat_assets::{
 use cabat_shipyard::prelude::*;
 use cabat_spatial::Transform;
 use rustc_hash::FxHasher;
-use shipyard::{AllStoragesView, Component, IntoIter, Unique, View};
+use shipyard::{AllStoragesView, Component, IntoIter, SystemModificator, Unique, View};
 
 use crate::{
-    camera::MainCamera, render_tools, shared::SharedRendererResources, texture::Texture, Device,
-    Queue, RenderPass, SurfaceConfig, Vertex,
+    camera::MainCamera,
+    lighting::{LightingManager, LightingPlugin},
+    render_tools,
+    shared::SharedRendererResources,
+    texture::Texture,
+    Device, Queue, RenderPass, SurfaceConfig, Vertex,
 };
 
 //====================================================================
@@ -27,7 +31,11 @@ pub struct ModelPlugin;
 impl Plugin for ModelPlugin {
     fn build(self, builder: &WorkloadBuilder) {
         builder
-            .add_workload_pre(Stages::Setup, sys_setup_renderer)
+            .add_plugin(LightingPlugin)
+            .add_workload_pre(
+                Stages::Setup,
+                sys_setup_renderer.after_all("lighting_setup"),
+            )
             .add_workload_last(Stages::Update, sys_prep_models)
             .add_workload(Stages::Render, sys_render_models);
     }
@@ -39,12 +47,14 @@ fn sys_setup_renderer(
     config: Res<SurfaceConfig>,
     shared: Res<SharedRendererResources>,
     camera: Res<MainCamera>,
+    lighting: Res<LightingManager>,
 ) {
     let renderer = ModelRenderer::new(
         device.inner(),
         config.inner(),
         &shared,
         camera.bind_group_layout(),
+        lighting.bind_group_layout(),
     );
 
     all_storages.add_unique(renderer);
@@ -64,6 +74,7 @@ fn sys_prep_models(
                 let instance = ModelInstanceRaw {
                     transform: transform.to_array(),
                     color: model.color,
+                    normal: transform.to_normal_matrix_array(),
                 };
 
                 acc.entry(model.data.id())
@@ -109,6 +120,7 @@ fn sys_render_models(
 
     model_storage: Res<AssetStorage<ModelData>>,
     texture_storage: Res<AssetStorage<Texture>>,
+    lighting: Res<LightingManager>,
 ) {
     let instances = renderer
         .instances
@@ -119,6 +131,7 @@ fn sys_render_models(
     renderer.render_storage(
         pass.pass(),
         camera.bind_group(),
+        lighting.bind_group(),
         instances.as_slice(),
         &model_storage,
         &texture_storage,
@@ -192,16 +205,27 @@ impl Vertex for ModelVertex {
 pub struct ModelInstanceRaw {
     pub transform: [f32; 16],
     pub color: [f32; 4],
+    pub normal: [f32; 9],
 }
 
 impl Vertex for ModelInstanceRaw {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+        const VERTEX_ATTRIBUTES: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
+            // Transform Matrix
             3 => Float32x4,
             4 => Float32x4,
             5 => Float32x4,
             6 => Float32x4,
-            7 => Float32x4
+
+            // Color
+            7 => Float32x4,
+
+            // Normal Matrix
+            8 => Float32x3,
+            9 => Float32x3,
+            10 => Float32x3,
+
+
         ];
 
         wgpu::VertexBufferLayout {
@@ -227,12 +251,17 @@ impl ModelRenderer {
         config: &wgpu::SurfaceConfiguration,
         shared: &SharedRendererResources,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
+        lighting_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         let pipeline = render_tools::create_pipeline(
             device,
             config,
             "Model Pipeline",
-            &[camera_bind_group_layout, shared.texture_bind_group_layout()],
+            &[
+                camera_bind_group_layout,
+                lighting_bind_group_layout,
+                shared.texture_bind_group_layout(),
+            ],
             &[ModelVertex::desc(), ModelInstanceRaw::desc()],
             include_str!("shaders/model.wgsl"),
             render_tools::RenderPipelineDescriptor::default()
@@ -250,12 +279,14 @@ impl ModelRenderer {
         &self,
         pass: &mut wgpu::RenderPass,
         camera_bind_group: &wgpu::BindGroup,
+        lighting_bind_group: &wgpu::BindGroup,
         instances: &[(HandleId<ModelData>, &ModelInstance)],
         model_storage: &AssetStorage<ModelData>,
         texture_storage: &AssetStorage<Texture>,
     ) {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, camera_bind_group, &[]);
+        pass.set_bind_group(1, lighting_bind_group, &[]);
 
         let model_storage = model_storage.get_storage();
         let texture_storage = texture_storage.get_storage();
@@ -270,7 +301,7 @@ impl ModelRenderer {
 
                 pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                pass.set_bind_group(1, texture.binding(), &[]);
+                pass.set_bind_group(2, texture.binding(), &[]);
 
                 pass.draw_indexed(0..mesh.index_count, 0, 0..instance.instance_count);
             });

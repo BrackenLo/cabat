@@ -6,10 +6,25 @@ struct Camera {
     position: vec3<f32>,
 }
 
+struct GlobalLightData {
+    ambient_color: vec3<f32>,
+    ambient_strength: f32,
+}
+
+struct Light {
+    position: vec4<f32>,
+    direction: vec4<f32>,
+    diffuse: vec4<f32>,
+    specular: vec4<f32>,
+}
+
 @group(0) @binding(0) var<uniform> camera: Camera;
 
-@group(1) @binding(0) var texture: texture_2d<f32>;
-@group(1) @binding(1) var texture_sampler: sampler;
+@group(1) @binding(0) var<uniform> global_lighting: GlobalLightData;
+@group(1) @binding(1) var<storage, read> light_array: array<Light>;
+
+@group(2) @binding(0) var texture: texture_2d<f32>;
+@group(2) @binding(1) var texture_sampler: sampler;
 
 
 //====================================================================
@@ -25,13 +40,20 @@ struct VertexIn {
     @location(4) transform_2: vec4<f32>,
     @location(5) transform_3: vec4<f32>,
     @location(6) transform_4: vec4<f32>,
+
     @location(7) color: vec4<f32>,
+
+    @location(8) normal_0: vec3<f32>,
+    @location(9) normal_1: vec3<f32>,
+    @location(10) normal_2: vec3<f32>,
 }
 
 struct VertexOut {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-    @location(1) color: vec4<f32>,
+    @location(0) position: vec3<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) normal: vec3<f32>,
+    @location(3) color: vec4<f32>,
 }
 
 //====================================================================
@@ -47,22 +69,60 @@ fn vs_main(in: VertexIn) -> VertexOut {
         in.transform_4,
     );
 
+    let normal_matrix = mat3x3<f32>(
+        in.normal_0,
+        in.normal_1,
+        in.normal_2,
+    );
+
     out.clip_position =
         camera.projection
         * transform
         * vec4<f32>(in.vertex_position, 1.);
 
+    out.position = (transform * vec4<f32>(in.vertex_position, 1)).xyz;
     out.uv = in.uv;
+    out.normal = normal_matrix * in.normal;
     out.color = in.color;
 
     return out;
 }
 
+//====================================================================
+
+const DEFAULT_MATERIAL_SHININESS: f32 = 32.;
+
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    let tex_color = textureSample(texture, texture_sampler, in.uv);
+
+    let ambient = vec3<f32>(global_lighting.ambient_strength * global_lighting.ambient_color);
+
+    let light_count = bitcast<i32>(arrayLength(&light_array));
+    var sum_diffuse = vec3<f32>();
+    var sum_specular = vec3<f32>();
+
+    for (var i = 0; i < light_count; i += 1) {
+        // Calculate Diffuse Color
+        let norm = normalize(in.normal);
+        let light_dir = normalize(light_array[i].position.xyz - in.position);
+
+        let diffuse_strength = max(dot(norm, light_dir), 0.0);
+        sum_diffuse += light_array[i].diffuse.xyz * diffuse_strength;
+
+        // Specular
+        let view_dir = normalize(camera.position - in.position);
+        let half_dir = normalize(view_dir + light_dir);
+        let specular_strength = pow(max(dot(norm, half_dir), 0.0), DEFAULT_MATERIAL_SHININESS);
+        sum_specular += light_array[i].specular.xyz * specular_strength;
+    }
+
+    let result = (
+        ambient
+        + sum_diffuse
+        + sum_specular
+    ) * textureSample(texture, texture_sampler, in.uv).xyz;
     
-    return tex_color * in.color;
+    return vec4(result, 1.0) * in.color;
 }
 
 //====================================================================
