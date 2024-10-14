@@ -91,9 +91,7 @@ fn sys_prep_texture3d(
         renderer
             .instances
             .entry(id)
-            .and_modify(|instance| {
-                instance.update(device.inner(), queue.inner(), raw.as_slice());
-            })
+            .and_modify(|instance| instance.update(device.inner(), queue.inner(), raw.as_slice()))
             .or_insert(Texture3dInstance {
                 instance_buffer: render_tools::create_instance_buffer(
                     device.inner(),
@@ -104,6 +102,7 @@ fn sys_prep_texture3d(
             });
     });
 
+    // TEST
     previous.into_iter().for_each(|to_remove| {
         renderer.instances.remove(&to_remove);
     });
@@ -119,7 +118,7 @@ fn sys_render_texture3d(
     let instances = renderer
         .instances
         .iter()
-        .map(|(id, instance)| (*id, &instance.instance_buffer, instance.instance_count))
+        .map(|(id, instance)| (*id, instance))
         .collect::<Vec<_>>();
 
     renderer.render_storage(
@@ -265,7 +264,7 @@ impl Texture3dRenderer {
         &self,
         pass: &mut wgpu::RenderPass,
         camera_bind_group: &wgpu::BindGroup,
-        instances: &[(HandleId<Texture>, &wgpu::Buffer, u32)],
+        instances: &[(HandleId<Texture>, &Texture3dInstance)],
         storage: &AssetStorage<Texture>,
     ) {
         pass.set_pipeline(&self.pipeline);
@@ -276,20 +275,20 @@ impl Texture3dRenderer {
 
         let storage = storage.get_storage();
 
-        instances.into_iter().for_each(|instance| {
-            pass.set_vertex_buffer(1, instance.1.slice(..));
+        instances.into_iter().for_each(|(handle, instance)| {
+            pass.set_vertex_buffer(1, instance.instance_buffer.slice(..));
 
-            let texture = storage.get(&instance.0).unwrap();
+            let texture = storage.get(handle).unwrap();
             pass.set_bind_group(1, texture.binding(), &[]);
 
-            pass.draw_indexed(0..self.index_count, 0, 0..instance.2);
+            pass.draw_indexed(0..self.index_count, 0, 0..instance.instance_count);
         });
     }
 }
 
 //====================================================================
 
-struct Texture3dInstance {
+pub struct Texture3dInstance {
     instance_buffer: wgpu::Buffer,
     instance_count: u32,
 }

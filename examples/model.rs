@@ -1,22 +1,19 @@
 //====================================================================
 
-use cabat::{
-    renderer::{
-        text::{Text3dBuffer, Text3dBufferDescriptor, Text3dRenderer, TextFontSystem},
-        PerspectiveCamera,
-    },
-    runner::{
-        tools::{Input, KeyCode, Time},
-        Runner,
-    },
-    DefaultPlugins,
-};
+use cabat::{renderer::PerspectiveCamera, DefaultPlugins};
 use cabat_common::{WindowResizeEvent, WindowSize};
-use cabat_renderer::{camera::MainCamera, Device, Queue};
+use cabat_renderer::{
+    camera::MainCamera, renderers::model::Model, shared::DefaultRendererAssets, Queue,
+};
+use cabat_runner::{
+    tools::{Input, KeyCode, Time},
+    Runner,
+};
 use cabat_shipyard::{prelude::*, UniqueTools};
 use cabat_spatial::Transform;
-use glam::Vec3Swizzles;
-use shipyard::{Component, EntitiesViewMut, IntoIter, IntoWorkload, Unique, ViewMut};
+use shipyard::{
+    AllStoragesView, Component, EntitiesViewMut, IntoIter, IntoWorkload, Unique, ViewMut,
+};
 
 //====================================================================
 
@@ -31,10 +28,10 @@ fn main() {
         builder
             .insert(Camera::default())
             .add_plugin(DefaultPlugins)
-            .add_workload(Stages::Setup, sys_setup_entities)
+            .add_workload(Stages::Setup, sys_spawn_entities)
             .add_workload(
                 Stages::Update,
-                (sys_update_camera, sys_move_camera, sys_rotate_point),
+                (sys_spin, sys_update_camera, sys_move_camera),
             )
             .add_event::<WindowResizeEvent>((sys_resize_camera).into_workload());
     });
@@ -47,79 +44,50 @@ struct Camera {
     raw: PerspectiveCamera,
 }
 
-#[derive(Component)]
-struct RotatePoint {
-    origin: glam::Vec3,
-    distance: f32,
+#[derive(Component, Default)]
+struct Spin {
     progress: f32,
     speed: f32,
 }
 
 //====================================================================
 
-fn sys_setup_entities(
-    mut entities: EntitiesViewMut,
-    device: Res<Device>,
-    mut renderer: ResMut<Text3dRenderer>,
-    mut font_system: ResMut<TextFontSystem>,
+fn sys_spawn_entities(
+    all_storages: AllStoragesView,
+    mut default_assets: ResMut<DefaultRendererAssets>,
 
-    mut vm_pos: ViewMut<Transform>,
-    mut vm_text_buffers: ViewMut<Text3dBuffer>,
-    mut vm_rotate_point: ViewMut<RotatePoint>,
+    mut entities: EntitiesViewMut,
+    mut vm_sprites: ViewMut<Model>,
+    mut vm_transform: ViewMut<Transform>,
+    mut vm_spin: ViewMut<Spin>,
 ) {
+    default_assets.load_cube(&all_storages);
+    let default_handle = default_assets.get_cube().unwrap();
+
     entities.add_entity(
-        (&mut vm_pos, &mut vm_text_buffers, &mut vm_rotate_point),
+        (&mut vm_sprites, &mut vm_transform, &mut vm_spin),
         (
-            Transform::from_translation(glam::Vec3::ZERO),
-            Text3dBuffer::new(
-                device.inner(),
-                &mut renderer,
-                font_system.inner_mut(),
-                &Text3dBufferDescriptor {
-                    text: "Hello World! 12345 \nABCDE",
-                    // text: "A\nB",
-                    // width: todo!(),
-                    pos: glam::vec3(0., 0., 20.),
-                    ..Default::default()
-                },
-            ),
-            RotatePoint {
-                origin: glam::Vec3::ZERO,
-                distance: 100.,
-                progress: 0.,
-                speed: 1.,
+            Model {
+                data: default_handle,
+                color: [1., 0., 0.5, 1.],
             },
+            // Transform::from_translation(glam::Vec3::new(0., 0., 50.)),
+            Transform::from_translation_scale(
+                glam::Vec3::new(0., 0., 50.),
+                glam::Vec3::new(30., 30., 30.),
+            ),
+            Spin::default(),
         ),
     );
 }
 
-//====================================================================
-
-fn sys_rotate_point(
-    time: Res<Time>,
-    mut vm_transform: ViewMut<Transform>,
-    mut vm_rotate_point: ViewMut<RotatePoint>,
-) {
-    (&mut vm_transform, &mut vm_rotate_point)
+fn sys_spin(time: Res<Time>, mut vm_transform: ViewMut<Transform>, mut vm_spin: ViewMut<Spin>) {
+    (&mut vm_transform, &mut vm_spin)
         .iter()
-        .for_each(|(mut transform, rotation)| {
-            rotation.progress += time.delta_seconds() * rotation.speed;
+        .for_each(|(mut transform, spin)| {
+            spin.progress += time.delta_seconds() * spin.speed;
 
-            transform.translation.x =
-                rotation.progress.sin() * rotation.distance + rotation.origin.x;
-
-            transform.translation.z =
-                rotation.progress.cos() * rotation.distance + rotation.origin.z;
-
-            let pos_2d = transform.translation.xz();
-            let target_2d = rotation.origin.xz();
-
-            let val = pos_2d - target_2d;
-            let angle = f32::atan2(val.y, val.x);
-
-            let angle_quat = glam::Quat::from_rotation_y(angle - 90_f32.to_radians());
-
-            transform.rotation = angle_quat.inverse();
+            transform.rotation = glam::Quat::from_rotation_y(spin.progress.sin());
         });
 }
 
@@ -171,13 +139,11 @@ fn sys_move_camera(time: Res<Time>, keys: Res<Input<KeyCode>>, mut camera: ResMu
     //--------------------------------------------------
 
     const CAMERA_MOVE_SPEED: f32 = 100.;
-    const CAMERA_TURN_SPEED: f32 = 5.;
 
     camera.raw.translation += (forward + right + up) * CAMERA_MOVE_SPEED * time.delta_seconds();
-    camera.raw.rotate_camera(
-        yaw * time.delta_seconds() * CAMERA_TURN_SPEED,
-        pitch * time.delta_seconds() * CAMERA_TURN_SPEED,
-    );
+    camera
+        .raw
+        .rotate_camera(yaw * time.delta_seconds(), pitch * time.delta_seconds());
 }
 
 //====================================================================

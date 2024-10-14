@@ -1,5 +1,6 @@
 //====================================================================
 
+pub mod model;
 pub mod text;
 pub mod texture3d;
 
@@ -7,6 +8,7 @@ pub mod texture3d;
 
 pub mod plugins {
     pub use super::{
+        model::ModelPlugin,
         text::{Text2dPlugin, Text3dPlugin},
         texture3d::Texture3dPlugin,
     };

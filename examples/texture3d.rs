@@ -43,7 +43,7 @@ fn sys_spawn_entities(
     mut vm_transform: ViewMut<Transform>,
     mut vm_spin: ViewMut<Spin>,
 ) {
-    default_assets.load_default_texture(&all_storages);
+    default_assets.load_texture(&all_storages);
     let default_handle = default_assets.get_texture().unwrap();
     let loaded_handle = assets.load_file(&all_storages, "yay.jpg").unwrap();
 

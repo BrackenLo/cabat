@@ -35,6 +35,7 @@ impl Plugin for FullRendererPlugin {
         builder
             .add_plugin(CoreRendererPlugin)
             .add_plugin(plugins::Texture3dPlugin)
+            .add_plugin(plugins::ModelPlugin)
             .add_plugin(plugins::Text2dPlugin)
             .add_plugin(plugins::Text3dPlugin);
     }

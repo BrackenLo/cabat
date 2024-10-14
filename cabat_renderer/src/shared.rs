@@ -6,6 +6,7 @@ use shipyard::{AllStoragesView, Unique};
 
 use crate::{
     render_tools,
+    renderers::model::{Mesh, ModelData, ModelVertex},
     texture::{RawTexture, Texture},
     Device, Queue,
 };
@@ -78,6 +79,7 @@ impl SharedRendererResources {
 #[derive(Unique, Default)]
 pub struct DefaultRendererAssets {
     texture: Option<Handle<Texture>>,
+    cube: Option<Handle<ModelData>>,
 }
 
 impl DefaultRendererAssets {
@@ -87,49 +89,166 @@ impl DefaultRendererAssets {
             None => None,
         }
     }
-}
 
-impl DefaultRendererAssets {
-    pub fn load_default_texture(&mut self, all_storages: &AllStoragesView) {
-        match self.texture {
-            Some(_) => return,
-
-            None => {
-                let (device, queue, shared) = all_storages
-                    .borrow::<(Res<Device>, Res<Queue>, Res<SharedRendererResources>)>()
-                    .unwrap();
-
-                let raw_texture = RawTexture::from_color(
-                    device.inner(),
-                    queue.inner(),
-                    [255, 255, 255],
-                    Some("Default Texture"),
-                    None,
-                );
-
-                let default_texture =
-                    shared.load_texture(device.inner(), raw_texture, Some("Default Texture"));
-
-                let handle = {
-                    match all_storages.get_unique::<&AssetStorage<Texture>>() {
-                        Ok(storage) => storage.insert_asset(default_texture),
-
-                        Err(shipyard::error::GetStorage::MissingStorage { .. }) => {
-                            let storage = AssetStorage::<Texture>::new();
-                            let handle = storage.insert_asset(default_texture);
-                            all_storages.add_unique(storage);
-                            handle
-                        }
-
-                        Err(e) => panic!("{}", e),
-                    }
-                };
-
-                self.texture = Some(handle);
-            }
+    pub fn get_cube(&self) -> Option<Handle<ModelData>> {
+        match &self.cube {
+            Some(cube) => Some(cube.clone()),
+            None => None,
         }
     }
 }
+
+impl DefaultRendererAssets {
+    pub fn load_texture(&mut self, all_storages: &AllStoragesView) {
+        // Don't reload texture
+        if let Some(_) = self.texture {
+            return;
+        }
+
+        log::trace!("Loading default Texture");
+
+        let (device, queue, shared) = all_storages
+            .borrow::<(Res<Device>, Res<Queue>, Res<SharedRendererResources>)>()
+            .unwrap();
+
+        let raw_texture = RawTexture::from_color(
+            device.inner(),
+            queue.inner(),
+            [255, 255, 255],
+            Some("Default Texture"),
+            None,
+        );
+
+        let default_texture =
+            shared.load_texture(device.inner(), raw_texture, Some("Default Texture"));
+
+        let handle = {
+            match all_storages.get_unique::<&AssetStorage<Texture>>() {
+                Ok(storage) => storage.insert_asset(default_texture),
+
+                Err(shipyard::error::GetStorage::MissingStorage { .. }) => {
+                    let storage = AssetStorage::<Texture>::new();
+                    let handle = storage.insert_asset(default_texture);
+                    all_storages.add_unique(storage);
+                    handle
+                }
+
+                Err(e) => panic!("{}", e),
+            }
+        };
+
+        self.texture = Some(handle);
+    }
+
+    pub fn load_cube(&mut self, all_storages: &AllStoragesView) {
+        self.load_texture(all_storages);
+
+        // Don't reload cube
+        if let Some(_) = self.cube {
+            return;
+        }
+
+        log::trace!("Loading default cube model");
+
+        let device = all_storages.borrow::<Res<Device>>().unwrap();
+
+        let vertex_buffer =
+            render_tools::vertex_buffer(device.inner(), "Cube", &DEFAULT_CUBE_VERTICES);
+
+        let index_buffer =
+            render_tools::index_buffer(device.inner(), "Cube", &DEFAULT_CUBE_INDICES);
+
+        let default_model = ModelData {
+            meshes: vec![Mesh {
+                vertex_buffer,
+                index_buffer,
+                index_count: DEFAULT_CUBE_INDICES.len() as u32,
+                material: self.get_texture().unwrap(),
+            }],
+        };
+
+        let handle = {
+            match all_storages.get_unique::<&AssetStorage<ModelData>>() {
+                Ok(storage) => storage.insert_asset(default_model),
+
+                Err(shipyard::error::GetStorage::MissingStorage { .. }) => {
+                    let storage = AssetStorage::<ModelData>::new();
+                    let handle = storage.insert_asset(default_model);
+                    all_storages.add_unique(storage);
+                    handle
+                }
+
+                Err(e) => panic!("{}", e),
+            }
+        };
+
+        self.cube = Some(handle);
+    }
+}
+
+pub const DEFAULT_CUBE_VERTICES: [ModelVertex; 8] = [
+    // Back 4 vertices
+    // 0 - Top Right
+    ModelVertex {
+        position: [-0.5, 0.5, 0.5],
+        uv: [0., 0.],
+        normal: [0., 0., 0.],
+    },
+    // 1 - Bottom Right
+    ModelVertex {
+        position: [-0.5, -0.5, 0.5],
+        uv: [0., 1.],
+        normal: [0., 0., 0.],
+    },
+    // 2 - Bottom Left
+    ModelVertex {
+        position: [0.5, -0.5, 0.5],
+        uv: [1., 1.],
+        normal: [0., 0., 0.],
+    },
+    // 3 - Top Left
+    ModelVertex {
+        position: [0.5, 0.5, 0.5],
+        uv: [1., 0.],
+        normal: [0., 0., 0.],
+    },
+    //
+
+    // Front 4 vertices
+    // 4 - Top Left
+    ModelVertex {
+        position: [-0.5, 0.5, -0.5],
+        uv: [1., 0.],
+        normal: [0., 0., 0.],
+    },
+    // 5 - Bottom Left
+    ModelVertex {
+        position: [-0.5, -0.5, -0.5],
+        uv: [1., 1.],
+        normal: [0., 0., 0.],
+    },
+    // 6 - Bottom Right
+    ModelVertex {
+        position: [0.5, -0.5, -0.5],
+        uv: [0., 1.],
+        normal: [0., 0., 0.],
+    },
+    // 7 - Top Right
+    ModelVertex {
+        position: [0.5, 0.5, -0.5],
+        uv: [0., 0.],
+        normal: [0., 0., 0.],
+    },
+];
+
+pub const DEFAULT_CUBE_INDICES: [u16; 36] = [
+    4, 5, 6, 4, 6, 7, // Front Face
+    3, 2, 1, 3, 1, 0, // Back Face
+    0, 1, 5, 0, 5, 4, // Left Face
+    7, 6, 2, 7, 2, 3, // Right Face
+    0, 4, 7, 0, 7, 3, // Top Face
+    5, 1, 2, 5, 2, 6, // Bottom Face
+];
 
 //====================================================================
 
