@@ -12,16 +12,18 @@ use crate::{render_tools, Device, Queue};
 pub struct LightingPlugin;
 impl Plugin for LightingPlugin {
     fn build(self, builder: &WorkloadBuilder) {
-        builder.add_workload_pre(Stages::Setup, (sys_setup_lighting).tag("lighting_setup"));
+        builder
+            .add_workload_pre(Stages::Setup, (sys_setup_lighting).tag("lighting_setup"))
+            .add_workload_last(Stages::Update, sys_prep_lighting);
     }
 }
 
-pub fn sys_setup_lighting(all_storages: AllStoragesView, device: Res<Device>) {
+fn sys_setup_lighting(all_storages: AllStoragesView, device: Res<Device>) {
     let manager = LightingManager::new(device.inner());
     all_storages.add_unique(manager);
 }
 
-pub fn sys_prep_lighting(
+fn sys_prep_lighting(
     device: Res<Device>,
     queue: Res<Queue>,
     mut lighting: ResMut<LightingManager>,
@@ -37,7 +39,9 @@ pub fn sys_prep_lighting(
                 Light::Directional { diffuse, specular } => (*diffuse, *specular),
             };
 
-            LightData {
+            // println!("Light pos = {}", transform.translation);
+
+            LightRaw {
                 position: transform.translation.to_array(),
                 direction: transform.forward().to_array(),
                 diffuse,
@@ -56,7 +60,14 @@ pub fn sys_prep_lighting(
                 device.inner(),
                 &lighting.bind_group_layout,
                 &lighting.global_light_buffer,
+                &lighting.light_data_buffer,
                 &lighting.light_array_buffer,
+            );
+
+            queue.inner().write_buffer(
+                &lighting.light_data_buffer,
+                0,
+                bytemuck::cast_slice(&[LightData { light_count: 0 }]),
             );
         }
 
@@ -67,17 +78,35 @@ pub fn sys_prep_lighting(
                     0,
                     bytemuck::cast_slice(lights.as_slice()),
                 );
-            } else {
-                lighting.light_array_buffer_count = lights.len() as u32;
-                lighting.light_array_buffer =
-                    device
-                        .inner()
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("Light Array Buffer"),
-                            contents: bytemuck::cast_slice(lights.as_slice()),
-                            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                        });
+
+                queue.inner().write_buffer(
+                    &lighting.light_data_buffer,
+                    0,
+                    bytemuck::cast_slice(&[LightData {
+                        light_count: lights.len() as i32,
+                    }]),
+                );
+
+                return;
             }
+
+            lighting.light_array_buffer_count = lights.len() as u32;
+            lighting.light_array_buffer =
+                device
+                    .inner()
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Light Array Buffer"),
+                        contents: bytemuck::cast_slice(lights.as_slice()),
+                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    });
+
+            queue.inner().write_buffer(
+                &lighting.light_data_buffer,
+                0,
+                bytemuck::cast_slice(&[LightData {
+                    light_count: lights.len() as i32,
+                }]),
+            );
         }
     }
 }
@@ -87,6 +116,7 @@ pub fn sys_prep_lighting(
 #[derive(Unique)]
 pub struct LightingManager {
     global_light_buffer: wgpu::Buffer,
+    light_data_buffer: wgpu::Buffer,
     light_array_buffer: wgpu::Buffer,
     light_array_buffer_count: u32,
 
@@ -102,13 +132,20 @@ impl LightingManager {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+        let light_data_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Global Lighting Buffer"),
+            contents: bytemuck::cast_slice(&[LightData::default()]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
         let light_array_buffer = create_default_light_buffer(device);
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Light uniform bind group layout"),
             entries: &[
                 render_tools::bgl_uniform_entry(0, wgpu::ShaderStages::FRAGMENT),
-                render_tools::bgl_storage_entry(1, wgpu::ShaderStages::FRAGMENT),
+                render_tools::bgl_uniform_entry(1, wgpu::ShaderStages::FRAGMENT),
+                render_tools::bgl_storage_entry(2, wgpu::ShaderStages::FRAGMENT),
             ],
         });
 
@@ -116,11 +153,13 @@ impl LightingManager {
             device,
             &bind_group_layout,
             &global_light_buffer,
+            &light_data_buffer,
             &light_array_buffer,
         );
 
         Self {
             global_light_buffer,
+            light_data_buffer,
             light_array_buffer,
             light_array_buffer_count: 1,
 
@@ -159,8 +198,14 @@ impl Default for GlobalLightData {
 }
 
 #[repr(C)]
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug, Default)]
 pub struct LightData {
+    light_count: i32,
+}
+
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
+pub struct LightRaw {
     position: [f32; 3],
     direction: [f32; 3],
     diffuse: [f32; 4],
@@ -184,13 +229,20 @@ pub enum Light {
 fn create_default_light_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Light Array Buffer"),
-        contents: bytemuck::cast_slice(&[LightData {
+        contents: bytemuck::cast_slice(&[LightRaw {
             position: [0., 0., 0.],
             direction: [0., 0., 0.],
             diffuse: [0., 0., 0., 0.],
             specular: [0., 0., 0., 0.],
             padding: [0.; 2],
         }]),
+        // contents: bytemuck::cast_slice(&[LightRaw {
+        //     position: [-60., 0., 0.],
+        //     direction: [1., 0., 0.],
+        //     diffuse: [0.3, 0.3, 0.3, 0.],
+        //     specular: [1., 1., 1., 0.],
+        //     padding: [0.; 2],
+        // }]),
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
     })
 }
@@ -199,6 +251,7 @@ fn bind_lighting_buffers(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     global_light_buffer: &wgpu::Buffer,
+    light_data_buffer: &wgpu::Buffer,
     light_array_buffer: &wgpu::Buffer,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -213,6 +266,12 @@ fn bind_lighting_buffers(
             },
             wgpu::BindGroupEntry {
                 binding: 1,
+                resource: wgpu::BindingResource::Buffer(
+                    light_data_buffer.as_entire_buffer_binding(),
+                ),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
                 resource: wgpu::BindingResource::Buffer(
                     light_array_buffer.as_entire_buffer_binding(),
                 ),

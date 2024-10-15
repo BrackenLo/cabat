@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 
 use wgpu::util::DeviceExt;
 
-use crate::{texture::RawTexture, Vertex};
+use crate::{renderers::model::ModelVertex, texture::RawTexture, Vertex};
 
 //====================================================================
 
@@ -218,6 +218,57 @@ pub fn create_instance_buffer<T: bytemuck::Pod>(
         contents: bytemuck::cast_slice(data),
         usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
     })
+}
+
+//====================================================================
+
+pub fn calculate_model_normals(vertices: &mut [ModelVertex], indices: &[u16]) {
+    let mut vertex_acc = vec![(0, glam::Vec3::ZERO); vertices.len()];
+
+    let triangle_count = indices.len() / 3;
+
+    (0..triangle_count).for_each(|index| {
+        let index = index * 3;
+
+        let i1 = indices[index] as usize;
+        let i2 = indices[index + 1] as usize;
+        let i3 = indices[index + 2] as usize;
+
+        let v1: glam::Vec3 = vertices[i1].position.into();
+        let v2: glam::Vec3 = vertices[i2].position.into();
+        let v3: glam::Vec3 = vertices[i3].position.into();
+
+        let u = v2 - v1;
+        let v = v3 - v1;
+
+        // let normal = u.cross(v);
+        let normal = v.cross(u);
+
+        vertex_acc[i1].0 += 1;
+        vertex_acc[i1].1 += normal;
+
+        vertex_acc[i2].0 += 1;
+        vertex_acc[i2].1 += normal;
+
+        vertex_acc[i3].0 += 1;
+        vertex_acc[i3].1 += normal;
+    });
+
+    vertex_acc
+        .into_iter()
+        .enumerate()
+        .for_each(|(index, (count, normal))| {
+            if count == 0 {
+                log::warn!(
+                    "Calculate model normals: Vertex {} not used in any triangles",
+                    index
+                );
+                return;
+            }
+
+            let normal = normal.try_normalize().unwrap_or(glam::Vec3::ZERO);
+            vertices[index].normal = normal.to_array();
+        });
 }
 
 //====================================================================

@@ -28,6 +28,7 @@ cabat_shipyard.path = "cabat_shipyard"
 cabat_spatial.path = "cabat_spatial"
 
 [dev-dependencies]
+cabat_debug.path = "cabat_debug"
 env_logger = "0.11.5"
 glam = "0.29.0"
 log.workspace = true

@@ -153,8 +153,8 @@ impl Plugin for Example3dCameraPlugin {
 }
 
 #[derive(Unique, Default)]
-struct ExampleCamera {
-    raw: PerspectiveCamera,
+pub struct ExampleCamera {
+    pub raw: PerspectiveCamera,
 }
 
 fn sys_update_camera(

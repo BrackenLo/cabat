@@ -11,17 +11,22 @@ struct GlobalLightData {
     ambient_strength: f32,
 }
 
+struct LightData {
+    light_count: i32,
+}
+
 struct Light {
     position: vec4<f32>,
     direction: vec4<f32>,
-    diffuse: vec4<f32>,
-    specular: vec4<f32>,
+    diffuse_color: vec4<f32>,
+    specular_color: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 
 @group(1) @binding(0) var<uniform> global_lighting: GlobalLightData;
-@group(1) @binding(1) var<storage, read> light_array: array<Light>;
+@group(1) @binding(1) var<uniform> light_data: LightData;
+@group(1) @binding(2) var<storage, read> light_array: array<Light>;
 
 @group(2) @binding(0) var texture: texture_2d<f32>;
 @group(2) @binding(1) var texture_sampler: sampler;
@@ -75,12 +80,13 @@ fn vs_main(in: VertexIn) -> VertexOut {
         in.normal_2,
     );
 
+    let world_position = transform * vec4<f32>(in.vertex_position, 1.);
+
     out.clip_position =
         camera.projection
-        * transform
-        * vec4<f32>(in.vertex_position, 1.);
+        * world_position;
 
-    out.position = (transform * vec4<f32>(in.vertex_position, 1)).xyz;
+    out.position = world_position.xyz;
     out.uv = in.uv;
     out.normal = normal_matrix * in.normal;
     out.color = in.color;
@@ -97,23 +103,26 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 
     let ambient = vec3<f32>(global_lighting.ambient_strength * global_lighting.ambient_color);
 
-    let light_count = bitcast<i32>(arrayLength(&light_array));
+    // let light_count = bitcast<i32>(arrayLength(&light_array));
+    let light_count = light_data.light_count;
+
     var sum_diffuse = vec3<f32>();
     var sum_specular = vec3<f32>();
 
     for (var i = 0; i < light_count; i += 1) {
+
         // Calculate Diffuse Color
         let norm = normalize(in.normal);
         let light_dir = normalize(light_array[i].position.xyz - in.position);
 
         let diffuse_strength = max(dot(norm, light_dir), 0.0);
-        sum_diffuse += light_array[i].diffuse.xyz * diffuse_strength;
+        sum_diffuse += light_array[i].diffuse_color.xyz * diffuse_strength;
 
         // Specular
         let view_dir = normalize(camera.position - in.position);
         let half_dir = normalize(view_dir + light_dir);
         let specular_strength = pow(max(dot(norm, half_dir), 0.0), DEFAULT_MATERIAL_SHININESS);
-        sum_specular += light_array[i].specular.xyz * specular_strength;
+        sum_specular += light_array[i].specular_color.xyz * specular_strength;
     }
 
     let result = (

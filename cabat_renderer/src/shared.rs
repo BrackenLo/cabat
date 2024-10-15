@@ -152,8 +152,10 @@ impl DefaultRendererAssets {
 
         let device = all_storages.borrow::<Res<Device>>().unwrap();
 
-        let vertex_buffer =
-            render_tools::vertex_buffer(device.inner(), "Cube", &DEFAULT_CUBE_VERTICES);
+        let mut vertices = DEFAULT_CUBE_VERTICES;
+        render_tools::calculate_model_normals(&mut vertices, &DEFAULT_CUBE_INDICES);
+
+        let vertex_buffer = render_tools::vertex_buffer(device.inner(), "Cube", &vertices);
 
         let index_buffer =
             render_tools::index_buffer(device.inner(), "Cube", &DEFAULT_CUBE_INDICES);
