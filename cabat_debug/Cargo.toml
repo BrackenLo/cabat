@@ -1,0 +1,12 @@
+[package]
+name = "cabat_debug"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cabat_common.path = "../cabat_common"
+cabat_renderer.path = "../cabat_renderer"
+cabat_runner.path = "../cabat_runner"
+cabat_shipyard.path = "../cabat_shipyard"
+glam = "0.29.0"
+shipyard.workspace = true
