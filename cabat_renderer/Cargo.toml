@@ -12,7 +12,7 @@ cabat_spatial.path = "../cabat_spatial"
 cosmic-text = "0.12.1"
 etagere = "0.2.13"
 glam = "0.29.0"
-glyphon = { git = "https://github.com/grovesNL/glyphon.git", version = "0.6.0" }
+glyphon = { git = "https://github.com/grovesNL/glyphon.git", tag = "0.6.0" }
 image = "0.25.2"
 log.workspace = true
 lru = "0.12.4"
